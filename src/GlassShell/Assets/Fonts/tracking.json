@@ -1,0 +1,32 @@
+[
+  {
+    "style": "Bold",
+    "unitsPerEm": 1000,
+    "trackingUnits": -10,
+    "trackingEm": -0.01
+  },
+  {
+    "style": "Light",
+    "unitsPerEm": 1000,
+    "trackingUnits": -10,
+    "trackingEm": -0.01
+  },
+  {
+    "style": "Medium",
+    "unitsPerEm": 1000,
+    "trackingUnits": -10,
+    "trackingEm": -0.01
+  },
+  {
+    "style": "Regular",
+    "unitsPerEm": 1000,
+    "trackingUnits": -10,
+    "trackingEm": -0.01
+  },
+  {
+    "style": "SemiBold",
+    "unitsPerEm": 1000,
+    "trackingUnits": -10,
+    "trackingEm": -0.01
+  }
+]

@@ -1,0 +1,5 @@
+theme: DockLike
+controlStyles:
+  - target: StackPanel#SystemTrayFrameGrid, Grid#SystemTrayFrameGrid
+    styles:
+      - Visibility=Collapsed
