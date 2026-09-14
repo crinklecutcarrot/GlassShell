@@ -21,7 +21,7 @@ The setup script downloads the pinned .NET SDK and Zig compiler from their offic
 - The bar smoothly grows from 36 to 56 DIP for activities. An AppBar reserves that space for normal maximized windows; reservation returns to 36 DIP when activities end. Dropdowns overlay applications.
 - Outside clicks dismiss dropdowns and continue to the underlying application. Notes use atomic local autosave and save before dismissal. Stored at `%LOCALAPPDATA%/GlassShell/quick-note.txt`. Notion sync is not implemented. Timers are session-only.
 - Bundled DM Sans with -0.01em tracking and Tabler vector icons, available offline.
-- Native notification banners remain. The experimental Background Apps panel mirrors notification-area registrations, icons, tooltips, visibility, and left/right click callbacks. Control Center provides volume actions and settings links.
+- Native notification banners remain. The top-bar tray button opens Explorer's real notification-area overflow at the bottom of the screen, preserving native icon menus and behavior. Control Center provides volume actions and settings links.
 - Fullscreen application detection hides the shell. HDR/exclusive games have not been tested.
 
 ## Native taskbar
@@ -62,4 +62,4 @@ The fixed-width Active Timer module opens details with a visual progress bar, Pa
 
 Center activity cards use equal horizontal/vertical insets and animate opacity and position as the bar's height spring expands or collapses. Dropdowns prepare and lay out their complete glass surface while invisible, then animate the material instead of the native window opacity; this avoids presenting a stale or empty HWND frame on open.
 
-Windows does not provide a supported API for a third-party shell to enumerate and re-host notification icons owned by other applications. GlassShell now includes an experimental x64 Explorer hook modeled on the architecture used by Seelen UI. It observes `Shell_TrayWnd` registration messages, copies icon metadata into the top-bar process, broadcasts `TaskbarCreated` to recover existing registrations, and forwards clicks to the original owner window. Built-in indicators that bypass `Shell_NotifyIcon`, applications that fail to re-register, elevated-process boundaries, Explorer restarts, and future private-payload changes still need hardening. Explorer's tray remains visible as a recovery path.
+Windows does not provide a supported API for a third-party shell to reposition or re-host Explorer's notification overflow. GlassShell therefore uses UI Automation to invoke Explorer's own **Show Hidden Icons** control from the top bar. Windows positions the resulting native flyout above the bottom taskbar, and applications retain their original menus and interaction behavior. The earlier experimental icon mirror remains in the source for reference but is not started by the normal application flow.

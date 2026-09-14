@@ -33,7 +33,7 @@ internal sealed class ShellController : IDisposable
     public ShellController() { Bar = new(this); Panel = new(this); Alert = new(this); Model.Changed += Update; Media.Changed += Update; Tray.Changed += TrayChanged; }
     public void Start()
     {
-        Bar.Show(); Tray.Start(); timer.Tick += Tick; timer.Start(); CompositionTarget.Rendering += Render; outside = new(CaptureOutsidePress);
+        Bar.Show(); timer.Tick += Tick; timer.Start(); CompositionTarget.Rendering += Render; outside = new(CaptureOutsidePress);
         var menu = new System.Windows.Forms.ContextMenuStrip(); menu.Items.Add("Widgets", null, (_, _) => OpenPanel("widgets")); menu.Items.Add("Quit GlassShell", null, (_, _) => Exit());
         tray = new() { Visible = true, Text = "GlassShell · Ctrl+Alt+Esc to quit", Icon = System.Drawing.SystemIcons.Application, ContextMenuStrip = menu }; Update(); Storage.Log("Started status-bar layout");
     }

@@ -38,6 +38,7 @@ internal sealed class TrayService : IDisposable
     int backfillRunning;
     bool testAvailable;
     public bool Available => hook != IntPtr.Zero || testAvailable;
+    internal bool NativeFlyoutRequested { get; private set; }
     public IReadOnlyList<TrayIconItem> Icons => icons.Values.Where(icon => icon.Backfilled || Native.IsWindow(icon.Owner)).OrderBy(icon => icon.Tooltip).ToArray();
     public event Action? Changed;
 
@@ -73,6 +74,29 @@ internal sealed class TrayService : IDisposable
     {
         if (Storage.OverrideRoot == null && Interlocked.CompareExchange(ref backfillRunning, 1, 0) == 0)
             _ = Task.Run(BackfillFromExplorer);
+    }
+
+    public void ShowNativeOverflow()
+    {
+        if (Storage.OverrideRoot != null) { NativeFlyoutRequested = true; return; }
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var root = AutomationElement.RootElement;
+                var chevrons = root.FindAll(TreeScope.Descendants,
+                    new PropertyCondition(AutomationElement.AutomationIdProperty, "SystemTrayIcon"));
+                foreach (AutomationElement candidate in chevrons)
+                {
+                    if (!(candidate.Current.Name?.StartsWith("Show Hidden Icons", StringComparison.OrdinalIgnoreCase) ?? false)) continue;
+                    if (candidate.TryGetCurrentPattern(InvokePattern.Pattern, out object pattern))
+                        ((InvokePattern)pattern).Invoke();
+                    return;
+                }
+                Storage.Log("Native tray flyout button was not found");
+            }
+            catch (Exception ex) { Storage.Log("Native tray flyout: " + ex.Message); }
+        });
     }
 
     public bool ProcessCopyData(IntPtr lparam)
