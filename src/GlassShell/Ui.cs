@@ -2,9 +2,12 @@ using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Data;
+using Microsoft.Win32;
 
 namespace GlassShell;
 
@@ -28,6 +31,9 @@ internal static class Ui
     internal static Brush White = new SolidColorBrush(Color.FromRgb(248, 249, 253));
     internal static Brush Muted = new SolidColorBrush(Color.FromRgb(176, 186, 201));
     internal static Brush Accent = new SolidColorBrush(Color.FromRgb(152, 211, 255));
+    internal static readonly Color WindowsAccentColor = ReadWindowsAccent();
+    internal static readonly Brush WindowsAccent = new SolidColorBrush(WindowsAccentColor);
+    internal static readonly Brush WindowsAccentSurface = new SolidColorBrush(Color.FromArgb(112, WindowsAccentColor.R, WindowsAccentColor.G, WindowsAccentColor.B));
     internal static TextBlock Text(string text, double size = 13, Brush? color = null, FontWeight? weight = null) => new()
     {
         Text = text,
@@ -57,6 +63,18 @@ internal static class Ui
     {
         var button = Button("", action, size, size); button.Content = TablerIcon.Create(name, size < 30 ? 16 : size > 45 ? 22 : 18); button.ToolTip = tip; return button;
     }
+    internal static ToggleButton Toggle(bool on, Action action)
+    {
+        var toggle = new ToggleButton { IsChecked = on, Width = 42, Height = 24, Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)), BorderThickness = new Thickness(0), Cursor = Cursors.Hand, Focusable = false, ToolTip = on ? "Turn off" : "Turn on" };
+        var grid = new FrameworkElementFactory(typeof(Grid));
+        var track = new FrameworkElementFactory(typeof(Border)) { Name = "Track" }; track.SetValue(Border.CornerRadiusProperty, new CornerRadius(12)); track.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty)); grid.AppendChild(track);
+        var knob = new FrameworkElementFactory(typeof(Ellipse)) { Name = "Knob" }; knob.SetValue(FrameworkElement.WidthProperty, 16.0); knob.SetValue(FrameworkElement.HeightProperty, 16.0); knob.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left); knob.SetValue(FrameworkElement.MarginProperty, new Thickness(4)); knob.SetValue(Shape.FillProperty, White); grid.AppendChild(knob);
+        var template = new ControlTemplate(typeof(ToggleButton)) { VisualTree = grid };
+        var checkedState = new Trigger { Property = ToggleButton.IsCheckedProperty, Value = true }; checkedState.Setters.Add(new Setter(Border.BackgroundProperty, WindowsAccent, "Track")); checkedState.Setters.Add(new Setter(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Right, "Knob")); template.Triggers.Add(checkedState);
+        var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true }; hover.Setters.Add(new Setter(UIElement.OpacityProperty, .88)); template.Triggers.Add(hover);
+        var disabled = new Trigger { Property = UIElement.IsEnabledProperty, Value = false }; disabled.Setters.Add(new Setter(UIElement.OpacityProperty, .4)); template.Triggers.Add(disabled);
+        toggle.Template = template; toggle.Click += (_, _) => action(); return toggle;
+    }
     internal static Button ActionButton(string icon, string label, Action action, double width, double height = 42)
     {
         var button = Button("", action, width, height);
@@ -79,6 +97,20 @@ internal static class Ui
             if (System.IO.File.Exists(path)) { Open(path); return; }
             folder = folder.Parent;
         }
+    }
+    static Color ReadWindowsAccent()
+    {
+        try
+        {
+            object? raw = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM", "AccentColor", null);
+            if (raw is int signed)
+            {
+                // DWM stores AccentColor as ABGR, while WPF expects RGB.
+                uint value = unchecked((uint)signed); return Color.FromRgb((byte)value, (byte)(value >> 8), (byte)(value >> 16));
+            }
+        }
+        catch (Exception e) { Storage.Log("Read Windows accent: " + e.Message); }
+        return SystemParameters.WindowGlassColor;
     }
 }
 
