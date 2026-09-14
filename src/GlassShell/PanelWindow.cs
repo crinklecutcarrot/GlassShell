@@ -8,7 +8,7 @@ namespace GlassShell;
 
 internal sealed class PanelWindow : ShellWindow
 {
-    readonly ShellController owner; string current = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist; Slider? seek; Image? art; Button? play, pause, prev, next; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning; double panelHeight = 410;
+    readonly ShellController owner; string current = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist; Slider? seek; Image? art; StackPanel? musicLabels; Button? play, pause, prev, next, like; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation; double panelHeight = 410;
     public string CurrentPage => current; public bool IsOpen { get; private set; }
     public int PresentationVersion { get; private set; }
     public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; }
@@ -51,7 +51,7 @@ internal sealed class PanelWindow : ShellWindow
     void Build()
     {
         var trayIcons = current == "tray" ? owner.Tray.Icons : Array.Empty<TrayIconItem>();
-        panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 330, "notifications" => 260, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Glass.Content.Children.Clear(); lastPlaying = lastRunning = null; note = null; live = elapsed = total = musicTitle = musicArtist = null; timerProgress = null; addMinute = null; seek = null; art = null; play = pause = prev = next = null; dragging = false;
+        panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 330, "notifications" => 260, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; note = null; live = elapsed = total = musicTitle = musicArtist = null; timerProgress = null; addMinute = null; seek = null; art = null; musicLabels = null; play = pause = prev = next = like = null; dragging = false;
         var body = new StackPanel { Margin = new Thickness(24) }; var header = new Grid(); header.Children.Add(Ui.Text(current switch { "music" => "Now playing", "active-timer" => "Active Timer", "timer" => "Timer", "notes" => "Notes", "widgets" => "Widgets", "controls" => "Control Center", "notifications" => "Notifications", "tray" => "Background apps", _ => "GlassShell" }, 22, weight: FontWeights.SemiBold)); var close = Ui.Icon("x", "Close", Dismiss, 30); close.HorizontalAlignment = HorizontalAlignment.Right; header.Children.Add(close); body.Children.Add(header); body.Children.Add(new Border { Height = 18 });
         switch (current)
         {
@@ -69,7 +69,7 @@ internal sealed class PanelWindow : ShellWindow
             case "notes":
                 note = new TextBox { Text = Storage.Read("quick-note.txt"), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Height = 248, FontFamily = Ui.Font, FontSize = 15, Foreground = Ui.White, Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)), BorderThickness = new Thickness(0), Padding = new Thickness(12), CaretBrush = Ui.White }; note.TextChanged += (_, _) => SaveNote(); body.Children.Add(note); live = Ui.Text("Saved on this device", 11, Ui.Muted); live.Margin = new Thickness(0, 10, 0, 0); body.Children.Add(live); break;
             case "music":
-                art = new Image { Width = 72, Height = 72, Stretch = Stretch.UniformToFill, Margin = new Thickness(0, 0, 16, 0) }; musicTitle = Ui.Text("", 18, weight: FontWeights.SemiBold); musicArtist = Ui.Text("", 13, Ui.Muted); var labels = new StackPanel { Width = 260, VerticalAlignment = VerticalAlignment.Center }; labels.Children.Add(musicTitle); labels.Children.Add(musicArtist); body.Children.Add(Ui.Row(art, labels)); body.Children.Add(new Border { Height = 24 });
+                art = new Image { Width = 72, Height = 72, Stretch = Stretch.UniformToFill, Margin = new Thickness(0, 0, 16, 0) }; musicTitle = Ui.Text("", 18, weight: FontWeights.SemiBold); musicArtist = Ui.Text("", 13, Ui.Muted); musicLabels = new StackPanel { Width = 215, VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(musicTitle); musicLabels.Children.Add(musicArtist); like = Ui.Icon("heart", "Save song in GlassShell", owner.Media.ToggleLike, 40); like.Margin = new Thickness(5, 0, 0, 0); body.Children.Add(Ui.Row(art, musicLabels, like)); body.Children.Add(new Border { Height = 24 });
                 seek = new Slider { Minimum = 0, Maximum = 1, Height = 24, IsMoveToPointEnabled = false, Foreground = Ui.Accent }; StyleSeek(seek);
                 // Own pointer capture across the whole rail so handled thumb events
                 // cannot swallow release, and clicks and drags use the same path.
@@ -125,7 +125,31 @@ internal sealed class PanelWindow : ShellWindow
  """;
         slider.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(template);
     }
-    public void Tick() { if (!IsOpen) return; if ((current == "timer" || current == "active-timer") && live != null) { if (timerProgress != null) timerProgress.Value = owner.Model.TimerProgress; if (addMinute != null) addMinute.IsEnabled = owner.Model.TimerActive; live.Text = owner.Model.TimerActive ? owner.Model.TimerText : "00:00"; if (pause != null) { if (lastRunning != owner.Model.TimerRunning) { lastRunning = owner.Model.TimerRunning; pause.Content = Ui.Text(owner.Model.TimerRunning ? "Pause" : "Resume"); } pause.IsEnabled = owner.Model.TimerActive && !owner.Model.TimerFinished; } } if (current == "music" && seek != null) { var m = owner.Media; art!.Source = m.AlbumArt; musicTitle!.Text = m.Visible ? m.Title : "Nothing playing"; musicArtist!.Text = m.Artist; seek.IsEnabled = m.CanSeek && m.Duration > TimeSpan.Zero; seek.ToolTip = seek.IsEnabled ? "Seek" : "This player does not support seeking"; if (!dragging) seek.Value = m.Duration > TimeSpan.Zero ? m.Position.TotalSeconds / m.Duration.TotalSeconds : 0; elapsed!.Text = ShellModel.FormatTime(dragging ? TimeSpan.FromTicks((long)(m.Duration.Ticks * seek.Value)) : m.Position); total!.Text = ShellModel.FormatTime(m.Duration); if (lastPlaying != m.Playing) { lastPlaying = m.Playing; play!.Content = TablerIcon.Create(m.Playing ? "player-pause" : "player-play", 22); } play!.IsEnabled = m.CanToggle; prev!.IsEnabled = m.CanPrevious; next!.IsEnabled = m.CanNext; } }
+    public void Tick() { if (!IsOpen) return; if ((current == "timer" || current == "active-timer") && live != null) { if (timerProgress != null) timerProgress.Value = owner.Model.TimerProgress; if (addMinute != null) addMinute.IsEnabled = owner.Model.TimerActive; live.Text = owner.Model.TimerActive ? owner.Model.TimerText : "00:00"; if (pause != null) { if (lastRunning != owner.Model.TimerRunning) { lastRunning = owner.Model.TimerRunning; pause.Content = Ui.Text(owner.Model.TimerRunning ? "Pause" : "Resume"); } pause.IsEnabled = owner.Model.TimerActive && !owner.Model.TimerFinished; } } if (current == "music" && seek != null) { var m = owner.Media; PresentTrack(m); seek.IsEnabled = m.CanSeek && m.Duration > TimeSpan.Zero; seek.ToolTip = seek.IsEnabled ? "Seek" : "This player does not support seeking"; if (!dragging) seek.Value = m.Duration > TimeSpan.Zero ? m.Position.TotalSeconds / m.Duration.TotalSeconds : 0; elapsed!.Text = ShellModel.FormatTime(dragging ? TimeSpan.FromTicks((long)(m.Duration.Ticks * seek.Value)) : m.Position); total!.Text = ShellModel.FormatTime(m.Duration); if (lastPlaying != m.Playing) { lastPlaying = m.Playing; play!.Content = TablerIcon.Create(m.Playing ? "player-pause" : "player-play", 22); } if (lastLiked != m.Liked) { lastLiked = m.Liked; like!.Content = TablerIcon.Create("heart", 20, m.Liked ? Ui.Danger : Ui.White); like.ToolTip = m.Liked ? "Remove from saved songs" : "Save song in GlassShell"; like.SetValue(Ui.IsSelectedProperty, m.Liked); } like!.IsEnabled = m.Visible; play!.IsEnabled = m.CanToggle; prev!.IsEnabled = m.CanPrevious; next!.IsEnabled = m.CanNext; } }
+    void PresentTrack(MediaService m)
+    {
+        if (art == null || musicLabels == null || musicTitle == null || musicArtist == null) return;
+        if (displayedTrack < 0) { displayedTrack = targetTrack = m.TrackRevision; musicTitle.Text = m.Visible ? m.Title : "Nothing playing"; musicArtist.Text = m.Artist; art.Source = m.AlbumArt; return; }
+        if (targetTrack == m.TrackRevision) { if (displayedTrack == targetTrack) art.Source = m.AlbumArt; return; }
+        targetTrack = m.TrackRevision; int token = ++trackAnimation; double direction = m.TrackDirection < 0 ? 1 : -1;
+        AnimatePart(art, 0, direction * 26, 0, 130);
+        AnimatePart(musicLabels, 0, direction * 26, 36, 140, false, () =>
+        {
+            if (token != trackAnimation || art == null || musicLabels == null) return;
+            musicTitle.Text = m.Title; musicArtist.Text = m.Artist; art.Source = m.AlbumArt;
+            AnimatePart(art, -direction * 26, 0, 0, 185, true);
+            AnimatePart(musicLabels, -direction * 26, 0, 42, 195, true, () => { if (token == trackAnimation) displayedTrack = targetTrack; });
+        });
+    }
+    static void AnimatePart(FrameworkElement element, double from, double to, int delay, int duration, bool fadeIn = false, Action? completed = null)
+    {
+        var move = element.RenderTransform as TranslateTransform ?? new TranslateTransform(); element.RenderTransform = move;
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var x = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(duration)) { BeginTime = TimeSpan.FromMilliseconds(delay), EasingFunction = ease };
+        var opacity = new DoubleAnimation(fadeIn ? 0 : 1, fadeIn ? 1 : 0, TimeSpan.FromMilliseconds(duration)) { BeginTime = TimeSpan.FromMilliseconds(delay), EasingFunction = ease };
+        if (completed != null) opacity.Completed += (_, _) => completed();
+        move.BeginAnimation(TranslateTransform.XProperty, x); element.BeginAnimation(OpacityProperty, opacity);
+    }
 }
 internal sealed class TimerAlertWindow : ShellWindow
 {

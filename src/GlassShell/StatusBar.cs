@@ -13,7 +13,8 @@ internal sealed class StatusBar : ShellWindow
     readonly Spring height = new(36); readonly ShellController owner; uint callback; bool registered, positioning;
     readonly Dictionary<string, Button> anchors = new(); readonly TextBlock clock = Ui.Text("", 12), title = Ui.Text("", 12, weight: FontWeights.SemiBold), artist = Ui.Text("", 10, Ui.Muted), time = Ui.Text("", 14);
     readonly Image art = new() { Width = 34, Height = 34, Stretch = Stretch.UniformToFill, Margin = new Thickness(0, 0, 9, 0) };
-    readonly Image timerIcon = TablerIcon.Create("stopwatch", 16); bool? lastExpired; bool? lastPlaying; readonly Button music, timerButton, play, previous, next; readonly Grid divider; readonly TimerRing ring = new();
+    readonly StackPanel musicLabels; readonly Image timerIcon = TablerIcon.Create("stopwatch", 16); bool? lastExpired; bool? lastPlaying; readonly Button music, timerButton, play, previous, next; readonly Grid divider; readonly TimerRing ring = new();
+    int displayedTrack = -1, targetTrack = -1, trackAnimation;
     bool musicShown, timerShown, dividerShown;
     public bool MusicVisible => music.Visibility == Visibility.Visible; public bool TimerVisible => timerButton.Visibility == Visibility.Visible;
     public StatusBar(ShellController controller) : base("GlassShell · Status", 1000, 56)
@@ -21,9 +22,9 @@ internal sealed class StatusBar : ShellWindow
         owner = controller; Glass.TintAmount = .48; Glass.BottomBorderOnly = true;
         var left = Ui.Row(Link("layout-grid", "Widgets", "widgets"), Link("stopwatch", "Timer", "timer"), Link("pencil", "Notes", "notes")); left.HorizontalAlignment = HorizontalAlignment.Left; left.VerticalAlignment = VerticalAlignment.Center; left.Margin = new Thickness(10, 0, 0, 0); Glass.Content.Children.Add(left);
         var right = Ui.Row(Link("apps", "Background apps", "tray"), Link("adjustments-horizontal", "Control Center", "controls"), Link("bell", "Notifications", "notifications"), clock, Link("dots", "Session", "session")); right.HorizontalAlignment = HorizontalAlignment.Right; right.VerticalAlignment = VerticalAlignment.Center; right.Margin = new Thickness(0, 0, 10, 0); clock.Margin = new Thickness(12, 0, 6, 0); Glass.Content.Children.Add(right);
-        var labels = new StackPanel { Width = 185, VerticalAlignment = VerticalAlignment.Center }; labels.Children.Add(title); labels.Children.Add(artist);
+        musicLabels = new StackPanel { Width = 185, VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(title); musicLabels.Children.Add(artist);
         previous = Ui.Icon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 28); play = Ui.Icon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 28); next = Ui.Icon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 28);
-        music = Ui.Button("", () => owner.OpenPanel("music"), 360, 46); music.Margin = new Thickness(0); music.Padding = new Thickness(12, 6, 12, 6); music.ClipToBounds = true; music.Tag = "music"; anchors["music"] = music; music.Content = Ui.Row(art, labels, previous, play, next);
+        music = Ui.Button("", () => owner.OpenPanel("music"), 360, 46); music.Margin = new Thickness(0); music.Padding = new Thickness(12, 6, 12, 6); music.ClipToBounds = true; music.Tag = "music"; anchors["music"] = music; music.Content = Ui.Row(art, musicLabels, previous, play, next);
         var icon = new Grid { Width = 32, Height = 32 }; icon.Children.Add(ring); icon.Children.Add(timerIcon);
         var timerLabels = new StackPanel { Width = 104, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         timerLabels.Children.Add(Ui.Text("Active Timer", 10, Ui.Muted)); timerLabels.Children.Add(time);
@@ -43,11 +44,37 @@ internal sealed class StatusBar : ShellWindow
         SetActivityVisible(music, m.Visible, ref musicShown, -12, 360);
         SetActivityVisible(timerButton, owner.Model.TimerActive, ref timerShown, 12, 176);
         SetActivityVisible(divider, m.Visible && owner.Model.TimerActive, ref dividerShown, 0, 25);
-        title.Text = m.Title; artist.Text = m.Artist; art.Source = m.AlbumArt; if (lastPlaying != m.Playing) { lastPlaying = m.Playing; play.Content = TablerIcon.Create(m.Playing ? "player-pause" : "player-play", 16); }
+        PresentTrack(m); if (lastPlaying != m.Playing) { lastPlaying = m.Playing; play.Content = TablerIcon.Create(m.Playing ? "player-pause" : "player-play", 16); }
         play.IsEnabled = m.CanToggle; previous.IsEnabled = m.CanPrevious; next.IsEnabled = m.CanNext; music.SetValue(Ui.IsSelectedProperty, owner.Panel?.IsOpen == true && owner.Panel.CurrentPage == "music");
         timerButton.SetValue(Ui.IsSelectedProperty, (owner.Panel?.IsOpen == true && owner.Panel.CurrentPage == "active-timer") || owner.Alert?.IsOpen == true);
         if (lastExpired != owner.Model.TimerFinished) { lastExpired = owner.Model.TimerFinished; timerIcon.Source = TablerIcon.Create("stopwatch", 16, owner.Model.TimerFinished ? Ui.Danger : Ui.White).Source; }
         time.Text = owner.Model.TimerText; ring.Progress = owner.Model.TimerProgress; ring.InvalidateVisual(); height.Target = m.Visible || owner.Model.TimerActive ? 56 : 36; if (height.Target > ReservedHeight) { ReservedHeight = height.Target; if (registered) Reserve(); }
+    }
+    void PresentTrack(MediaService m)
+    {
+        if (displayedTrack < 0) { displayedTrack = targetTrack = m.TrackRevision; title.Text = m.Title; artist.Text = m.Artist; art.Source = m.AlbumArt; return; }
+        if (targetTrack == m.TrackRevision) { if (displayedTrack == targetTrack) art.Source = m.AlbumArt; return; }
+        targetTrack = m.TrackRevision; int token = ++trackAnimation; double direction = m.TrackDirection < 0 ? 1 : -1;
+        AnimateTrackPart(art, 0, direction * 18, 0, 120);
+        AnimateTrackPart(musicLabels, 0, direction * 18, 28, 130, false, () =>
+        {
+            if (token != trackAnimation) return;
+            title.Text = m.Title; artist.Text = m.Artist; art.Source = m.AlbumArt;
+            art.BeginAnimation(OpacityProperty, null); musicLabels.BeginAnimation(OpacityProperty, null);
+            var artMove = art.RenderTransform as TranslateTransform ?? new TranslateTransform(); art.RenderTransform = artMove; artMove.X = -direction * 18; art.Opacity = 0;
+            var textMove = musicLabels.RenderTransform as TranslateTransform ?? new TranslateTransform(); musicLabels.RenderTransform = textMove; textMove.X = -direction * 18; musicLabels.Opacity = 0;
+            AnimateTrackPart(art, -direction * 18, 0, 0, 170, true);
+            AnimateTrackPart(musicLabels, -direction * 18, 0, 34, 180, true, () => { if (token == trackAnimation) displayedTrack = targetTrack; });
+        });
+    }
+    static void AnimateTrackPart(FrameworkElement element, double from, double to, int delay, int duration, bool fadeIn = false, Action? completed = null)
+    {
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var move = element.RenderTransform as TranslateTransform ?? new TranslateTransform(); element.RenderTransform = move;
+        var x = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(duration)) { BeginTime = TimeSpan.FromMilliseconds(delay), EasingFunction = ease };
+        var opacity = new DoubleAnimation(fadeIn ? 0 : 1, fadeIn ? 1 : 0, TimeSpan.FromMilliseconds(duration)) { BeginTime = TimeSpan.FromMilliseconds(delay), EasingFunction = ease };
+        if (completed != null) opacity.Completed += (_, _) => completed();
+        move.BeginAnimation(TranslateTransform.XProperty, x); element.BeginAnimation(OpacityProperty, opacity);
     }
     static void SetActivityVisible(FrameworkElement element, bool visible, ref bool shown, double offset, double expandedWidth)
     {

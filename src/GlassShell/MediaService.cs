@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -17,6 +19,8 @@ internal sealed class MediaService : IDisposable
     private DateTimeOffset lastValidMedia = DateTimeOffset.MinValue;
     private TimeSpan observedPosition;
     private DateTimeOffset observedAt;
+    private readonly HashSet<string> likedSongs = new(StringComparer.OrdinalIgnoreCase);
+    private int requestedDirection;
     public string Title { get; private set; } = "";
     public string Artist { get; private set; } = "";
     public bool Playing { get; private set; }
@@ -28,6 +32,10 @@ internal sealed class MediaService : IDisposable
     public bool CanPrevious { get; private set; }
     public bool CanSeek { get; private set; }
     public ImageSource? AlbumArt { get; private set; }
+    public int TrackRevision { get; private set; }
+    public int TrackDirection { get; private set; } = 1;
+    public bool Liked => likedSongs.Contains(TrackKey);
+    string TrackKey => Title.Trim() + "\n" + Artist.Trim();
     public TimeSpan Start { get; private set; }
     public TimeSpan End { get; private set; }
     public TimeSpan Duration => End > Start ? End - Start : TimeSpan.Zero;
@@ -35,7 +43,7 @@ internal sealed class MediaService : IDisposable
     public event Action? Changed;
     public async Task Initialize()
     {
-        try { manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); await Refresh(); }
+        try { foreach (string key in JsonSerializer.Deserialize<string[]>(Storage.Read("liked-songs.json")) ?? Array.Empty<string>()) likedSongs.Add(key); manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); await Refresh(); }
         catch (Exception ex) { Storage.Log("Media: " + ex.Message); }
     }
     public async Task Refresh()
@@ -84,8 +92,11 @@ internal sealed class MediaService : IDisposable
             }
             if (disposed) return;
             // Commit one coherent update after asynchronous thumbnail retrieval.
+            string nextTitle = properties.Title, nextArtist = properties.Artist;
+            bool trackChanged = !string.IsNullOrWhiteSpace(Title) && (!string.Equals(Title, nextTitle, StringComparison.Ordinal) || !string.Equals(Artist, nextArtist, StringComparison.Ordinal));
             Available = true; Playing = playing; Paused = paused;
-            Title = properties.Title; Artist = properties.Artist; AlbumArt = artwork; artworkHash = hash;
+            Title = nextTitle; Artist = nextArtist; AlbumArt = artwork; artworkHash = hash;
+            if (trackChanged) { TrackDirection = requestedDirection < 0 ? -1 : 1; requestedDirection = 0; TrackRevision++; }
             CanToggle = state.Controls.IsPlayPauseToggleEnabled; CanNext = state.Controls.IsNextEnabled;
             CanPrevious = state.Controls.IsPreviousEnabled; CanSeek = state.Controls.IsPlaybackPositionEnabled;
             Start = timeline.StartTime; End = timeline.EndTime; observedPosition = timeline.Position;
@@ -110,10 +121,17 @@ internal sealed class MediaService : IDisposable
         if (session == null) return;
         try
         {
+            if (action == "next") requestedDirection = 1; else if (action == "previous") requestedDirection = -1;
             bool success = action switch { "next" => await session.TrySkipNextAsync(), "previous" => await session.TrySkipPreviousAsync(), _ => await session.TryTogglePlayPauseAsync() };
-            if (!success) Storage.Log("Player declined " + action); await Refresh();
+            if (!success) { requestedDirection = 0; Storage.Log("Player declined " + action); } await Refresh();
         }
         catch (Exception ex) { Storage.Log("Media control: " + ex.Message); }
+    }
+    public void ToggleLike()
+    {
+        if (!Visible || string.IsNullOrWhiteSpace(Title)) return;
+        if (!likedSongs.Add(TrackKey)) likedSongs.Remove(TrackKey);
+        Storage.Write("liked-songs.json", JsonSerializer.Serialize(likedSongs)); Changed?.Invoke();
     }
     public async Task Seek(double fraction)
     {
@@ -135,6 +153,11 @@ internal sealed class MediaService : IDisposable
         Title = Available ? "A test track" : ""; Artist = Available ? "Test artist" : ""; AlbumArt = artwork;
         Start = TimeSpan.Zero; End = TimeSpan.FromMinutes(4); observedPosition = TimeSpan.FromSeconds(50); observedAt = DateTimeOffset.UtcNow;
         CanToggle = CanNext = CanPrevious = CanSeek = Available; Changed?.Invoke();
+    }
+    internal void SetTestTrack(string title, string artist, int direction = 1)
+    {
+        if (Storage.OverrideRoot == null) throw new InvalidOperationException();
+        Title = title; Artist = artist; TrackDirection = direction; TrackRevision++; Changed?.Invoke();
     }
     public void Dispose() { disposed = true; session = null; manager = null; }
 }

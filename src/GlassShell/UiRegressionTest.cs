@@ -36,6 +36,13 @@ internal sealed class UiRegressionTest
             await Press(new Point(s.Bar.AnchorCenter("music") * s.Bar.Scale, (s.Bar.Top + 24) * s.Bar.Scale)); checks["music surface click opens dropdown"] = s.Panel.IsOpen && s.Panel.CurrentPage == "music";
             var center = (StackPanel)s.Bar.Glass.Content.Children[2]; var music = (Button)center.Children[0]; checks["selected music highlight"] = ((SolidColorBrush)((Border)music.Template.FindName("ButtonSurface", music)).Background).Color.A == 54; var musicRow = (StackPanel)music.Content; var transport = (Button)musicRow.Children[2]; await Press(transport.PointToScreen(new Point(14, 14))); checks["bar transport does not toggle music menu"] = s.Panel.IsOpen && s.Panel.CurrentPage == "music";
             var musicBody = (StackPanel)s.Panel.Glass.Content.Children[0];
+            var detailsRow = (StackPanel)musicBody.Children[2]; var detailArt = (Image)detailsRow.Children[0]; var detailLike = (Button)detailsRow.Children[2];
+            s.Media.SetTestTrack("Next test track", "Next artist", 1); await Task.Delay(70);
+            checks["next track exits left"] = ((TranslateTransform)detailArt.RenderTransform).X < 0;
+            await Task.Delay(560); checks["next track enters and settles"] = ((TextBlock)((StackPanel)detailsRow.Children[1]).Children[0]).Text == "Next test track";
+            s.Media.SetTestTrack("Previous test track", "Previous artist", -1); await Task.Delay(70);
+            checks["previous track exits right"] = ((TranslateTransform)detailArt.RenderTransform).X > 0;
+            await Task.Delay(560); if (s.Media.Liked) s.Media.ToggleLike(); await Press(detailLike.PointToScreen(new Point(20, 20))); checks["song like toggles"] = s.Media.Liked;
             foreach (var child in musicBody.Children) if (child is Slider rail)
             {
                 await Press(rail.PointToScreen(new Point(rail.ActualWidth * .75, 12)));
