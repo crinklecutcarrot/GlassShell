@@ -24,12 +24,12 @@ internal sealed class StatusBar : ShellWindow
         var right = Ui.Row(Link("apps", "Background apps", "tray"), Link("adjustments-horizontal", "Control Center", "controls"), Link("bell", "Notifications", "notifications"), clock, Link("dots", "Session", "session")); right.HorizontalAlignment = HorizontalAlignment.Right; right.VerticalAlignment = VerticalAlignment.Center; right.Margin = new Thickness(0, 0, 10, 0); clock.Margin = new Thickness(12, 0, 6, 0); Glass.Content.Children.Add(right);
         musicLabels = new StackPanel { Width = 185, VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(title); musicLabels.Children.Add(artist);
         previous = Ui.Icon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 28); play = Ui.Icon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 28); next = Ui.Icon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 28);
-        music = Ui.Button("", () => owner.OpenPanel("music"), 360, 46); music.Margin = new Thickness(0); music.Padding = new Thickness(8); music.ClipToBounds = true; music.Tag = "music"; anchors["music"] = music; music.Content = Ui.Row(art, musicLabels, previous, play, next);
+        music = Ui.Button("", () => owner.OpenPanel("music"), 342, 46); music.Margin = new Thickness(0); music.Padding = new Thickness(8); music.ClipToBounds = true; music.Tag = "music"; anchors["music"] = music; music.Content = Ui.Row(art, musicLabels, previous, play, next);
         var icon = new Grid { Width = 30, Height = 30 }; icon.Children.Add(ring); icon.Children.Add(timerIcon);
         var timerLabels = new StackPanel { Width = 104, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         timerLabels.Children.Add(Ui.Text("Active Timer", 10, Ui.Muted)); timerLabels.Children.Add(time);
         System.Windows.Documents.Typography.SetNumeralAlignment(time, FontNumeralAlignment.Tabular);
-        timerButton = Ui.Button("", owner.OpenActiveTimer, 176, 46); timerButton.Margin = new Thickness(0); timerButton.Padding = new Thickness(8); timerButton.ClipToBounds = true; timerButton.Tag = "active-timer"; anchors["active-timer"] = timerButton; timerButton.Content = Ui.Row(icon, timerLabels);
+        timerButton = Ui.Button("", owner.OpenActiveTimer, 160, 46); timerButton.Margin = new Thickness(0); timerButton.Padding = new Thickness(8); timerButton.ClipToBounds = true; timerButton.Tag = "active-timer"; anchors["active-timer"] = timerButton; timerButton.Content = Ui.Row(icon, timerLabels);
         divider = new Grid { Width = 25, Height = 24, ClipToBounds = true, VerticalAlignment = VerticalAlignment.Center };
         divider.Children.Add(new Border { Width = 1, Height = 24, Background = Ui.Muted, Opacity = .35, HorizontalAlignment = HorizontalAlignment.Center });
         music.Visibility = timerButton.Visibility = divider.Visibility = Visibility.Collapsed;
@@ -41,8 +41,8 @@ internal sealed class StatusBar : ShellWindow
     public void Tick()
     {
         clock.Text = DateTime.Now.ToString("ddd d MMM   h:mm tt"); var m = owner.Media;
-        SetActivityVisible(music, m.Visible, ref musicShown, -12, 360);
-        SetActivityVisible(timerButton, owner.Model.TimerActive, ref timerShown, 12, 176);
+        SetActivityVisible(music, m.Visible, ref musicShown, -12, 342);
+        SetActivityVisible(timerButton, owner.Model.TimerActive, ref timerShown, 12, 160);
         SetActivityVisible(divider, m.Visible && owner.Model.TimerActive, ref dividerShown, 0, 25);
         PresentTrack(m); if (lastPlaying != m.Playing) { lastPlaying = m.Playing; play.Content = TablerIcon.Create(m.Playing ? "player-pause" : "player-play", 16); }
         play.IsEnabled = m.CanToggle; previous.IsEnabled = m.CanPrevious; next.IsEnabled = m.CanNext; music.SetValue(Ui.IsSelectedProperty, owner.Panel?.IsOpen == true && owner.Panel.CurrentPage == "music");

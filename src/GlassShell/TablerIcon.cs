@@ -27,7 +27,8 @@ internal static class TablerIcon
         var pen = new Pen(brush ?? Ui.White, 1.8) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
         // Preserve the SVG viewBox even when an icon does not reach all four edges.
         drawing.Children.Add(new GeometryDrawing(Brushes.Transparent, null, new RectangleGeometry(new Rect(0, 0, 24, 24))));
-        foreach (var shape in shapes) drawing.Children.Add(new GeometryDrawing(null, pen, shape));
+        bool filled = name.EndsWith("-filled", StringComparison.Ordinal);
+        foreach (var shape in shapes) drawing.Children.Add(new GeometryDrawing(filled ? brush ?? Ui.White : null, filled ? null : pen, shape));
         drawing.Freeze();
         return new Image { Source = new DrawingImage(drawing), Width = size, Height = size, Stretch = Stretch.Uniform, IsHitTestVisible = false, VerticalAlignment = VerticalAlignment.Center };
     }
