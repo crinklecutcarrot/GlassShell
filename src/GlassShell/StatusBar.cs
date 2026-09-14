@@ -12,7 +12,7 @@ internal sealed class StatusBar : ShellWindow
     public double ReservedHeight { get; private set; } = 36; public double VisualHeight => height.Value;
     readonly Spring height = new(36); readonly ShellController owner; uint callback; bool registered, positioning;
     readonly Dictionary<string, Button> anchors = new(); readonly TextBlock clock = Ui.Text("", 12), title = Ui.Text("", 12, weight: FontWeights.SemiBold), artist = Ui.Text("", 10, Ui.Muted), time = Ui.Text("", 14);
-    readonly Image art = new() { Width = 34, Height = 34, Stretch = Stretch.UniformToFill, Margin = new Thickness(0, 0, 9, 0) };
+    readonly RoundedImage art = new(30, 30, 6) { Margin = new Thickness(0, 0, 9, 0) };
     readonly StackPanel musicLabels; readonly Image timerIcon = TablerIcon.Create("stopwatch", 16); bool? lastExpired; bool? lastPlaying; readonly Button music, timerButton, play, previous, next; readonly Grid divider; readonly TimerRing ring = new();
     int displayedTrack = -1, targetTrack = -1, trackAnimation;
     bool musicShown, timerShown, dividerShown;
@@ -24,12 +24,12 @@ internal sealed class StatusBar : ShellWindow
         var right = Ui.Row(Link("apps", "Background apps", "tray"), Link("adjustments-horizontal", "Control Center", "controls"), Link("bell", "Notifications", "notifications"), clock, Link("dots", "Session", "session")); right.HorizontalAlignment = HorizontalAlignment.Right; right.VerticalAlignment = VerticalAlignment.Center; right.Margin = new Thickness(0, 0, 10, 0); clock.Margin = new Thickness(12, 0, 6, 0); Glass.Content.Children.Add(right);
         musicLabels = new StackPanel { Width = 185, VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(title); musicLabels.Children.Add(artist);
         previous = Ui.Icon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 28); play = Ui.Icon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 28); next = Ui.Icon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 28);
-        music = Ui.Button("", () => owner.OpenPanel("music"), 360, 46); music.Margin = new Thickness(0); music.Padding = new Thickness(12, 6, 12, 6); music.ClipToBounds = true; music.Tag = "music"; anchors["music"] = music; music.Content = Ui.Row(art, musicLabels, previous, play, next);
-        var icon = new Grid { Width = 32, Height = 32 }; icon.Children.Add(ring); icon.Children.Add(timerIcon);
+        music = Ui.Button("", () => owner.OpenPanel("music"), 360, 46); music.Margin = new Thickness(0); music.Padding = new Thickness(8); music.ClipToBounds = true; music.Tag = "music"; anchors["music"] = music; music.Content = Ui.Row(art, musicLabels, previous, play, next);
+        var icon = new Grid { Width = 30, Height = 30 }; icon.Children.Add(ring); icon.Children.Add(timerIcon);
         var timerLabels = new StackPanel { Width = 104, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         timerLabels.Children.Add(Ui.Text("Active Timer", 10, Ui.Muted)); timerLabels.Children.Add(time);
         System.Windows.Documents.Typography.SetNumeralAlignment(time, FontNumeralAlignment.Tabular);
-        timerButton = Ui.Button("", owner.OpenActiveTimer, 176, 46); timerButton.Margin = new Thickness(0); timerButton.Padding = new Thickness(12, 7, 12, 7); timerButton.ClipToBounds = true; timerButton.Tag = "active-timer"; anchors["active-timer"] = timerButton; timerButton.Content = Ui.Row(icon, timerLabels);
+        timerButton = Ui.Button("", owner.OpenActiveTimer, 176, 46); timerButton.Margin = new Thickness(0); timerButton.Padding = new Thickness(8); timerButton.ClipToBounds = true; timerButton.Tag = "active-timer"; anchors["active-timer"] = timerButton; timerButton.Content = Ui.Row(icon, timerLabels);
         divider = new Grid { Width = 25, Height = 24, ClipToBounds = true, VerticalAlignment = VerticalAlignment.Center };
         divider.Children.Add(new Border { Width = 1, Height = 24, Background = Ui.Muted, Opacity = .35, HorizontalAlignment = HorizontalAlignment.Center });
         music.Visibility = timerButton.Visibility = divider.Visibility = Visibility.Collapsed;
@@ -113,7 +113,7 @@ internal sealed class StatusBar : ShellWindow
 internal sealed class TimerRing : FrameworkElement
 {
     public double Progress { get; set; }
-    protected override void OnRender(DrawingContext dc) { var center = new Point(16, 16); dc.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)), 2), center, 14, 14); double p = Math.Clamp(Progress, 0, 1); if (p <= 0) return; var pen = new Pen(Ui.Accent, 2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }; if (p >= .9999) { dc.DrawEllipse(null, pen, center, 14, 14); return; } double a = p * Math.PI * 2 - Math.PI / 2; var g = new StreamGeometry(); using (var c = g.Open()) { c.BeginFigure(new Point(16, 2), false, false); c.ArcTo(new Point(16 + 14 * Math.Cos(a), 16 + 14 * Math.Sin(a)), new Size(14, 14), 0, p > .5, SweepDirection.Clockwise, true, false); } dc.DrawGeometry(null, pen, g); }
+    protected override void OnRender(DrawingContext dc) { var center = new Point(15, 15); dc.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)), 2), center, 13, 13); double p = Math.Clamp(Progress, 0, 1); if (p <= 0) return; var pen = new Pen(Ui.Accent, 2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }; if (p >= .9999) { dc.DrawEllipse(null, pen, center, 13, 13); return; } double a = p * Math.PI * 2 - Math.PI / 2; var g = new StreamGeometry(); using (var c = g.Open()) { c.BeginFigure(new Point(15, 2), false, false); c.ArcTo(new Point(15 + 13 * Math.Cos(a), 15 + 13 * Math.Sin(a)), new Size(13, 13), 0, p > .5, SweepDirection.Clockwise, true, false); } dc.DrawGeometry(null, pen, g); }
 }
 
 

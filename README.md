@@ -16,7 +16,7 @@ The setup script downloads the pinned .NET SDK and Zig compiler from their offic
 ## Current behavior
 
 - Left: Widgets, Timer, and Notes. Each opens a dropdown beneath its button. Widgets is a placeholder for future widgets.
-- Center: music appears while playing and remains while paused. Album artwork, song/artist, and previous/play-pause/next controls are shown. Clicking the player surface opens a larger menu with progress and the same controls. Seeking is enabled only when the media session supports it. Chrome sessions are preferred.
+- Center: music appears while playing and remains while paused. Rounded album artwork, song/artist, and previous/play-pause/next controls are shown. Track changes animate in their playback direction. Clicking the player surface opens a larger menu with progress, controls, and a YouTube Music like button. Seeking is enabled only when the media session supports it. Actively playing Chrome sessions are preferred.
 - An active timer appears after music, separated by a divider with 12-DIP spacing. A circular progress indicator surrounds the timer icon. At zero, a small Time’s Up popup opens and the timer continues into negative overtime until Stop. Dismissing that popup leaves the timer running; click the bar timer to reopen it.
 - The bar smoothly grows from 36 to 56 DIP for activities. An AppBar reserves that space for normal maximized windows; reservation returns to 36 DIP when activities end. Dropdowns overlay applications.
 - Outside clicks dismiss dropdowns and continue to the underlying application. Notes use atomic local autosave and save before dismissal. Stored at `%LOCALAPPDATA%/GlassShell/quick-note.txt`. Notion sync is not implemented. Timers are session-only.
@@ -27,6 +27,10 @@ The setup script downloads the pinned .NET SDK and Zig compiler from their offic
 ## Native taskbar
 
 The Windows taskbar remains available during tray-manager validation. A proposed Windhawk DockLike configuration is in `config/`; no Explorer styling has been installed or applied. See `config/README.md` for details and sources.
+
+## YouTube Music likes
+
+Windows media sessions do not expose song ratings. GlassShell includes a local Chrome extension bridge in `extension/youtube-music` so the heart reflects and clicks YouTube Music's real Like control. In `chrome://extensions`, enable Developer mode, choose **Load unpacked**, select that folder, and reload the YouTube Music tab once. Communication stays on `127.0.0.1:45971`; the heart remains disabled until the extension connects.
 
 ## Material
 

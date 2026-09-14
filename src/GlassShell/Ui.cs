@@ -8,6 +8,18 @@ using System.Windows.Data;
 
 namespace GlassShell;
 
+internal sealed class RoundedImage : Border
+{
+    readonly Image image;
+    public ImageSource? Source { get => image.Source; set => image.Source = value; }
+    public RoundedImage(double width, double height, double radius)
+    {
+        Width = width; Height = height; CornerRadius = new CornerRadius(radius); ClipToBounds = true;
+        image = new Image { Width = width, Height = height, Stretch = Stretch.UniformToFill,
+            Clip = new RectangleGeometry(new Rect(0, 0, width, height), radius, radius) }; Child = image;
+    }
+}
+
 internal static class Ui
 {
     internal static readonly DependencyProperty IsSelectedProperty = DependencyProperty.RegisterAttached("IsSelected", typeof(bool), typeof(Ui), new PropertyMetadata(false));

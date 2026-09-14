@@ -1,8 +1,7 @@
 using System;
 using System.IO;
-using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Windows.Media.Control;
@@ -19,7 +18,9 @@ internal sealed class MediaService : IDisposable
     private DateTimeOffset lastValidMedia = DateTimeOffset.MinValue;
     private TimeSpan observedPosition;
     private DateTimeOffset observedAt;
-    private readonly HashSet<string> likedSongs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly YouTubeMusicBridge likeBridge = new();
+    private bool youtubeLiked;
+    private bool testLikeConnected;
     private int requestedDirection;
     public string Title { get; private set; } = "";
     public string Artist { get; private set; } = "";
@@ -34,8 +35,8 @@ internal sealed class MediaService : IDisposable
     public ImageSource? AlbumArt { get; private set; }
     public int TrackRevision { get; private set; }
     public int TrackDirection { get; private set; } = 1;
-    public bool Liked => likedSongs.Contains(TrackKey);
-    string TrackKey => Title.Trim() + "\n" + Artist.Trim();
+    public bool Liked => LikeConnected && youtubeLiked;
+    public bool LikeConnected => testLikeConnected || likeBridge.Connected;
     public TimeSpan Start { get; private set; }
     public TimeSpan End { get; private set; }
     public TimeSpan Duration => End > Start ? End - Start : TimeSpan.Zero;
@@ -43,13 +44,8 @@ internal sealed class MediaService : IDisposable
     public event Action? Changed;
     public async Task Initialize()
     {
-        try
-        {
-            string saved = Storage.Read("liked-songs.json");
-            if (!string.IsNullOrWhiteSpace(saved))
-                foreach (string key in JsonSerializer.Deserialize<string[]>(saved) ?? Array.Empty<string>()) likedSongs.Add(key);
-        }
-        catch (Exception ex) { Storage.Log("Saved songs: " + ex.Message); }
+        likeBridge.LikeStateChanged += liked => Application.Current.Dispatcher.BeginInvoke(new Action(() => { youtubeLiked = liked; Changed?.Invoke(); }));
+        likeBridge.Start();
         try { manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); await Refresh(); }
         catch (Exception ex) { Storage.Log("Media: " + ex.Message); }
     }
@@ -145,9 +141,8 @@ internal sealed class MediaService : IDisposable
     }
     public void ToggleLike()
     {
-        if (!Visible || string.IsNullOrWhiteSpace(Title)) return;
-        if (!likedSongs.Add(TrackKey)) likedSongs.Remove(TrackKey);
-        Storage.Write("liked-songs.json", JsonSerializer.Serialize(likedSongs)); Changed?.Invoke();
+        if (!Visible || !LikeConnected) return;
+        youtubeLiked = !youtubeLiked; if (!testLikeConnected) likeBridge.ToggleLike(); Changed?.Invoke();
     }
     public async Task Seek(double fraction)
     {
@@ -168,12 +163,12 @@ internal sealed class MediaService : IDisposable
         lastValidMedia = DateTimeOffset.UtcNow; Available = playing || paused; Playing = playing; Paused = paused;
         Title = Available ? "A test track" : ""; Artist = Available ? "Test artist" : ""; AlbumArt = artwork;
         Start = TimeSpan.Zero; End = TimeSpan.FromMinutes(4); observedPosition = TimeSpan.FromSeconds(50); observedAt = DateTimeOffset.UtcNow;
-        CanToggle = CanNext = CanPrevious = CanSeek = Available; Changed?.Invoke();
+        CanToggle = CanNext = CanPrevious = CanSeek = Available; testLikeConnected = Available; Changed?.Invoke();
     }
     internal void SetTestTrack(string title, string artist, int direction = 1)
     {
         if (Storage.OverrideRoot == null) throw new InvalidOperationException();
         Title = title; Artist = artist; TrackDirection = direction; TrackRevision++; Changed?.Invoke();
     }
-    public void Dispose() { disposed = true; session = null; manager = null; }
+    public void Dispose() { disposed = true; likeBridge.Dispose(); session = null; manager = null; }
 }
