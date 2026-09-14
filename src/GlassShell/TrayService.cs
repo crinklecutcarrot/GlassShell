@@ -32,7 +32,7 @@ internal sealed class TrayService : IDisposable
     IntPtr module, hook;
     bool testAvailable;
     public bool Available => hook != IntPtr.Zero || testAvailable;
-    public IReadOnlyList<TrayIconItem> Icons => icons.Values.Where(icon => icon.Visible && Native.IsWindow(icon.Owner)).OrderBy(icon => icon.Tooltip).ToArray();
+    public IReadOnlyList<TrayIconItem> Icons => icons.Values.Where(icon => Native.IsWindow(icon.Owner)).OrderBy(icon => icon.Tooltip).ToArray();
     public event Action? Changed;
 
     public void Start()
@@ -40,7 +40,13 @@ internal sealed class TrayService : IDisposable
         if (Storage.OverrideRoot != null || hook != IntPtr.Zero) return;
         string path = Path.Combine(AppContext.BaseDirectory, "GlassShell.TrayHook.dll");
         if (!File.Exists(path)) { Storage.Log("Tray hook unavailable: native DLL was not built"); return; }
-        module = LoadLibrary(path);
+        // Explorer can retain an injected module after a hook is removed. Load a
+        // disposable, uniquely named copy so upgrades never lock the build or app.
+        string runtimeDirectory = Path.Combine(Storage.Root, "hooks");
+        Directory.CreateDirectory(runtimeDirectory);
+        string runtimePath = Path.Combine(runtimeDirectory, $"GlassShell.TrayHook.{Environment.ProcessId}.{Guid.NewGuid():N}.dll");
+        File.Copy(path, runtimePath, true);
+        module = LoadLibrary(runtimePath);
         if (module == IntPtr.Zero) { Storage.Log("Tray hook LoadLibrary failed: " + Marshal.GetLastWin32Error()); return; }
         IntPtr procedure = GetProcAddress(module, "CallWndProc");
         IntPtr shellTray = FindWindow("Shell_TrayWnd", null);
@@ -62,12 +68,17 @@ internal sealed class TrayService : IDisposable
         var copy = Marshal.PtrToStructure<CopyData>(lparam);
         if (copy.Data.ToUInt64() != GlassTrayCopyData || copy.Payload == IntPtr.Zero || copy.Size < Marshal.SizeOf<TrayEvent>()) return false;
         var data = Marshal.PtrToStructure<TrayEvent>(copy.Payload);
-        string key = data.Guid != Guid.Empty ? data.Guid.ToString("D") : $"{data.Owner:x}_{data.Uid}";
+        string proposedKey = data.Guid != Guid.Empty ? data.Guid.ToString("D") : $"{data.Owner:x}_{data.Uid}";
+        var matched = icons.Values.FirstOrDefault(icon =>
+            (data.Guid != Guid.Empty && icon.Guid == data.Guid) ||
+            (icon.Owner == new IntPtr(unchecked((long)data.Owner)) && icon.Uid == data.Uid));
+        string key = matched?.Key ?? proposedKey;
         if (data.Operation == NimDelete) { if (icons.Remove(key)) Changed?.Invoke(); return true; }
         if (data.Operation is not (NimAdd or NimModify or NimSetVersion)) return false;
         bool added;
         TrayIconItem item;
-        if (icons.TryGetValue(key, out var existing)) { item = existing; added = false; }
+        if (matched != null) { item = matched; added = false; }
+        else if (icons.TryGetValue(key, out var existing)) { item = existing; added = false; }
         else
         {
             added = true;
@@ -91,7 +102,7 @@ internal sealed class TrayService : IDisposable
             }
             catch (Exception ex) { Storage.Log("Tray icon decode: " + ex.Message); }
         }
-        if (added) Storage.Log($"Tray icon captured: {item.Tooltip} ({item.Key})");
+        if (added || data.Operation == NimSetVersion) Storage.Log($"Tray icon {(added ? "captured" : "versioned")}: {item.Tooltip} ({item.Key}), visible={item.Visible}, version={item.Version}, payload={data.SourceSize}, callback=0x{item.Callback:x}");
         Changed?.Invoke(); return true;
     }
 
@@ -101,6 +112,16 @@ internal sealed class TrayService : IDisposable
         if (!Native.IsWindow(icon.Owner) || icon.Callback == 0) return;
         Native.GetWindowThreadProcessId(icon.Owner, out uint processId);
         AllowSetForegroundWindow(processId);
+        // Version 4 icons use the packed NOTIFYICON_VERSION_4 protocol. Sending
+        // legacy mouse messages first can open and immediately dismiss menus.
+        if (icon.Version >= 4)
+        {
+            if (action == "left") Notify(icon, 0x0400);             // NIN_SELECT
+            else if (action == "right") Notify(icon, 0x007B);       // WM_CONTEXTMENU
+            else if (action == "double") Notify(icon, 0x0203);      // WM_LBUTTONDBLCLK
+            else if (action == "middle") Notify(icon, 0x0208);      // WM_MBUTTONUP
+            return;
+        }
         uint[] messages = action switch
         {
             "double" => new uint[] { 0x0203, 0x0202 },
@@ -109,11 +130,6 @@ internal sealed class TrayService : IDisposable
             _ => new uint[] { 0x0201, 0x0202 },
         };
         foreach (uint message in messages) Notify(icon, message);
-        if (icon.Version >= 3)
-        {
-            if (action == "left") Notify(icon, 0x0400);       // NIN_SELECT
-            else if (action == "right") Notify(icon, 0x007B); // WM_CONTEXTMENU
-        }
     }
 
     internal string? LastTestAction { get; private set; }
@@ -150,7 +166,7 @@ internal sealed class TrayService : IDisposable
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 4)]
     struct TrayEvent
     {
-        public uint Operation, Uid, Callback, Version, Flags, Visible;
+        public uint Operation, Uid, Callback, Version, Flags, Visible, SourceSize;
         public ulong Owner, Icon;
         public Guid Guid;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Tooltip;

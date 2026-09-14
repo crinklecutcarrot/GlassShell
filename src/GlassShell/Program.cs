@@ -13,7 +13,7 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        using var mutex = new Mutex(true, @"Local\GlassShell.Desktop.v1", out bool first); if (!first) return;
+        using var mutex = new Mutex(true, @"Local\GlassShell.Desktop.v2", out bool first); if (!first) return;
         bool test = args.Contains("--ui-regression-test"); if (test) Storage.OverrideRoot = Path.Combine(Environment.CurrentDirectory, "artifacts", "ui-regression", "data");
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown }; ShellController? shell = null;
         app.DispatcherUnhandledException += (_, e) => { Storage.Log(e.Exception.ToString()); e.Handled = true; shell?.Dispose(); app.Shutdown(1); };
