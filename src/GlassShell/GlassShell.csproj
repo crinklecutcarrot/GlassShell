@@ -17,5 +17,8 @@
     <Resource Include="Assets/Fonts/GlassShellDMSans-*.ttf" />
     <Resource Include="Assets/Icons/*.svg" />
     <Content Include="Assets/Fonts/OFL.txt;Assets/Icons/LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Native/GlassShell.TrayHook.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Native/GlassShell.TrayHook.dll')">
+      <TargetPath>GlassShell.TrayHook.dll</TargetPath>
+    </Content>
   </ItemGroup>
 </Project>

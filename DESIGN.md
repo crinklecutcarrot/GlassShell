@@ -10,6 +10,6 @@ The September 13 redesign replaces the custom bottom dock and floating island wi
 - Idle bar 36 DIP; activity bar 56 DIP. A stable 56-DIP host prevents capture reallocations during height animation. Work-area reservation grows before activity presentation and shrinks after collapse.
 - Dropdowns appear below their anchors and dismiss on outside click without swallowing the click. Notes save atomically. Shared rounded glass clips prevent square-corner flashes. Content and optical layers remain separate.
 - DM Sans with -0.01em tracking and Tabler icons throughout.
-- Native taskbar retains pinned/running apps and previews. Proposed Windhawk styling is separate in config/ and is not applied. Tray hosting and connected notification history remain future work. Native notification banners remain enabled.
+- Native taskbar retains pinned/running apps and previews. Proposed Windhawk styling is separate in config/ and is not applied. An experimental x64 `WH_CALLWNDPROC` hook mirrors third-party `Shell_NotifyIcon` registrations into the Background Apps panel and forwards their clicks; Explorer's tray remains visible until coverage and recovery are proven. Connected notification history remains future work. Native notification banners remain enabled.
 
 Target: one 3840×2160 display, 150% scaling, 60 Hz, RTX 3090, mostly SDR, YouTube Music in Chrome. The shader is an approximation; GPU-native capture and HDR color management remain future work. Widgets and Notion integration remain unfinished.

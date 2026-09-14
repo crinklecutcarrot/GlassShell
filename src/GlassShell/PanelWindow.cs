@@ -45,10 +45,12 @@ internal sealed class PanelWindow : ShellWindow
     public bool SaveNote() { if (note == null) return true; try { Storage.Write("quick-note.txt", note.Text); return true; } catch (Exception e) { Storage.Log("Save note: " + e); if (live != null) live.Text = "Could not save. Your note is still open."; return false; } }
     public void Dismiss() { if (!IsOpen || !SaveNote()) return; SetInput(false); IsOpen = false; IsHitTestVisible = false; int version = ++PresentationVersion; var fade = new DoubleAnimation(Glass.Opacity, 0, TimeSpan.FromMilliseconds(150)); fade.Completed += (_, _) => { if (version == PresentationVersion && !IsOpen) { Opacity = 0; Hide(); } }; Glass.BeginAnimation(OpacityProperty, fade); if (Glass.RenderTransform is TranslateTransform translate) translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -5, TimeSpan.FromMilliseconds(150))); }
     public void HideImmediately() { if (!SaveNote()) return; IsOpen = false; PresentationVersion++; SetInput(false); Glass.BeginAnimation(OpacityProperty, null); Glass.Opacity = 0; BeginAnimation(OpacityProperty, null); Opacity = 0; Hide(); }
+    public void RefreshTray() { if (IsOpen && current == "tray") { Build(); PositionSurface(); UpdateLayout(); } }
     public override void PositionSurface() { double anchor = owner.Bar.AnchorCenter(current); Left = Math.Clamp(anchor - Width / 2, owner.Bar.Left + 8, owner.Bar.Left + owner.Bar.Width - Width - 8); Top = owner.Bar.Top + owner.Bar.VisualHeight + 8; Shape(0, 0, Width, panelHeight, 25); }
     void Build()
     {
-        panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 330, "notifications" => 260, "tray" => 220, _ => 410 }; Glass.Content.Children.Clear(); lastPlaying = lastRunning = null; note = null; live = elapsed = total = musicTitle = musicArtist = null; timerProgress = null; addMinute = null; seek = null; art = null; play = pause = prev = next = null; dragging = false;
+        var trayIcons = current == "tray" ? owner.Tray.Icons : Array.Empty<TrayIconItem>();
+        panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 330, "notifications" => 260, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Glass.Content.Children.Clear(); lastPlaying = lastRunning = null; note = null; live = elapsed = total = musicTitle = musicArtist = null; timerProgress = null; addMinute = null; seek = null; art = null; play = pause = prev = next = null; dragging = false;
         var body = new StackPanel { Margin = new Thickness(24) }; var header = new Grid(); header.Children.Add(Ui.Text(current switch { "music" => "Now playing", "active-timer" => "Active Timer", "timer" => "Timer", "notes" => "Notes", "widgets" => "Widgets", "controls" => "Control Center", "notifications" => "Notifications", "tray" => "Background apps", _ => "GlassShell" }, 22, weight: FontWeights.SemiBold)); var close = Ui.Icon("x", "Close", Dismiss, 30); close.HorizontalAlignment = HorizontalAlignment.Right; header.Children.Add(close); body.Children.Add(header); body.Children.Add(new Border { Height = 18 });
         switch (current)
         {
@@ -80,7 +82,29 @@ internal sealed class PanelWindow : ShellWindow
             case "widgets": body.Children.Add(Ui.Text("Your widgets will live here.", 14, Ui.Muted)); break;
             case "controls": body.Children.Add(Ui.Row(Ui.ActionButton("wifi", "Wi-Fi settings", () => Ui.Open("ms-settings:network-wifi"), 174, 58), Ui.ActionButton("bluetooth", "Bluetooth settings", () => Ui.Open("ms-settings:bluetooth"), 174, 58))); body.Children.Add(Ui.Row(Ui.ActionButton("volume", "Sound settings", () => Ui.Open("ms-settings:sound"), 174, 58), Ui.ActionButton("device-desktop", "Display settings", () => Ui.Open("ms-settings:display"), 174, 58))); body.Children.Add(Ui.Row(Ui.Icon("volume-2", "Volume down", () => Native.Shortcut(0xAE, false), 52), Ui.Icon("volume-off", "Mute", () => Native.Shortcut(0xAD, false), 52), Ui.Icon("volume", "Volume up", () => Native.Shortcut(0xAF, false), 52))); body.Children.Add(Ui.Button("Open Windows quick settings", () => { HideImmediately(); Native.Shortcut(0x41); }, 350)); break;
             case "notifications": var info = Ui.Text("Notification history isn’t connected yet. Your Windows banners and history remain available.", 14, Ui.Muted); info.TextWrapping = TextWrapping.Wrap; body.Children.Add(info); body.Children.Add(Ui.Button("Open Windows notification history", () => { HideImmediately(); Native.Shortcut(0x4E); }, 350, 44)); break;
-            case "tray": var tray = Ui.Text("Your background apps are still in the Windows tray.", 14, Ui.Muted); tray.TextWrapping = TextWrapping.Wrap; body.Children.Add(tray); body.Children.Add(Ui.Button("Focus Windows tray", () => { HideImmediately(); Native.Shortcut(0x42); }, 350, 44)); break;
+            case "tray":
+                if (!owner.Tray.Available)
+                {
+                    var unavailable = Ui.Text("The tray mirror could not attach. Explorer’s tray remains available.", 14, Ui.Muted); unavailable.TextWrapping = TextWrapping.Wrap; body.Children.Add(unavailable);
+                    body.Children.Add(Ui.Button("Focus Windows tray", () => { HideImmediately(); Native.Shortcut(0x42); }, 350, 44));
+                }
+                else if (trayIcons.Count == 0) body.Children.Add(Ui.Text("Listening for background-app icons…", 14, Ui.Muted));
+                else
+                {
+                    body.Children.Add(Ui.Text($"{trayIcons.Count} background app{(trayIcons.Count == 1 ? "" : "s")}", 12, Ui.Muted));
+                    var iconGrid = new WrapPanel { Margin = new Thickness(0, 12, 0, 0) };
+                    foreach (var trayIcon in trayIcons)
+                    {
+                        var button = Ui.Button("", () => owner.Tray.SendAction(trayIcon, "left"), 44, 44);
+                        button.Content = trayIcon.Image == null ? TablerIcon.Create("apps", 21) : new Image { Source = trayIcon.Image, Width = 22, Height = 22, Stretch = Stretch.Uniform };
+                        button.ToolTip = trayIcon.Tooltip;
+                        button.MouseDoubleClick += (_, e) => { owner.Tray.SendAction(trayIcon, "double"); e.Handled = true; };
+                        button.PreviewMouseRightButtonUp += (_, e) => { owner.Tray.SendAction(trayIcon, "right"); e.Handled = true; };
+                        iconGrid.Children.Add(button);
+                    }
+                    body.Children.Add(iconGrid);
+                }
+                break;
             default: body.Children.Add(Ui.Button(owner.LiveGlass ? "Live glass: on" : "Live glass: off", () => { owner.SetLiveGlass(!owner.LiveGlass); Build(); }, 350, 42)); body.Children.Add(Ui.Button("Quit GlassShell", owner.Exit, 350, 42)); body.Children.Add(Ui.Text("Ctrl + Alt + Space    Widgets", 12, Ui.Muted)); body.Children.Add(Ui.Text("Ctrl + Alt + Esc         Quit", 12, Ui.Muted)); break;
         }
         Glass.Content.Children.Add(body);

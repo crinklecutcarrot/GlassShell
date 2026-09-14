@@ -4,3 +4,4 @@
 artifacts/
 *.user
 Launch GlassShell.lnk
+src/GlassShell/Native/

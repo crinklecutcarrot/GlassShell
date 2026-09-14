@@ -11,3 +11,4 @@ Invoke-WebRequest -Uri $taskArchive.url -OutFile $taskZip
 if ((Get-FileHash -LiteralPath $taskZip -Algorithm SHA512).Hash -ne $taskArchive.hash) { throw 'SDK checksum mismatch' }
 Expand-Archive -LiteralPath $taskZip -DestinationPath (Join-Path $taskTools 'dotnet') -Force
 & (Join-Path $taskTools 'dotnet\dotnet.exe') --version
+& (Join-Path $PSScriptRoot 'Build-Native.ps1')

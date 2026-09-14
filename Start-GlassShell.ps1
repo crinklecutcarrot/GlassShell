@@ -2,6 +2,9 @@ $ErrorActionPreference = 'Stop'
 $taskRoot = $PSScriptRoot
 $taskDotnet = Join-Path $taskRoot '.tools\dotnet\dotnet.exe'
 if (-not (Test-Path -LiteralPath $taskDotnet)) { throw 'Local SDK missing. See README.md for setup.' }
+if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'src\GlassShell\Native\GlassShell.TrayHook.dll'))) {
+    & (Join-Path $taskRoot 'Build-Native.ps1')
+}
 $env:DOTNET_ROOT = Split-Path $taskDotnet
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 & $taskDotnet build (Join-Path $taskRoot 'src\GlassShell\GlassShell.csproj') -c Release --nologo

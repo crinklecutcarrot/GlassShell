@@ -11,7 +11,7 @@ On Windows, clone the repository and run:
 .\Start-GlassShell.ps1
 ```
 
-The setup script downloads the pinned .NET SDK from Microsoft's release feed and verifies its SHA-512 checksum. Subsequent launches only need `Start-GlassShell.ps1`. Exit with Ctrl+Alt+Esc, the top-right session menu, or the Windows tray menu. Ctrl+Alt+Space toggles Widgets. No startup registration or administrator rights are required.
+The setup script downloads the pinned .NET SDK and Zig compiler from their official release feeds, verifies their checksums, and builds the native tray hook. Subsequent launches only need `Start-GlassShell.ps1`. Exit with Ctrl+Alt+Esc, the top-right session menu, or the Windows tray menu. Ctrl+Alt+Space toggles Widgets. No startup registration or administrator rights are required.
 
 ## Current behavior
 
@@ -21,12 +21,12 @@ The setup script downloads the pinned .NET SDK from Microsoft's release feed and
 - The bar smoothly grows from 36 to 56 DIP for activities. An AppBar reserves that space for normal maximized windows; reservation returns to 36 DIP when activities end. Dropdowns overlay applications.
 - Outside clicks dismiss dropdowns and continue to the underlying application. Notes use atomic local autosave and save before dismissal. Stored at `%LOCALAPPDATA%/GlassShell/quick-note.txt`. Notion sync is not implemented. Timers are session-only.
 - Bundled DM Sans with -0.01em tracking and Tabler vector icons, available offline.
-- Native notification banners remain. Notification history and background apps panels currently link to Windows; they are not replacement implementations. Control Center provides volume actions and settings links.
+- Native notification banners remain. The experimental Background Apps panel mirrors notification-area registrations, icons, tooltips, visibility, and left/right click callbacks. Control Center provides volume actions and settings links.
 - Fullscreen application detection hides the shell. HDR/exclusive games have not been tested.
 
 ## Native taskbar
 
-The Windows taskbar remains available. A proposed Windhawk DockLike configuration is in `config/`; no Explorer styling has been installed or applied. Do not hide the native tray until its functionality is hosted elsewhere. See `config/README.md` for details and sources.
+The Windows taskbar remains available during tray-manager validation. A proposed Windhawk DockLike configuration is in `config/`; no Explorer styling has been installed or applied. See `config/README.md` for details and sources.
 
 ## Material
 
@@ -58,4 +58,4 @@ The fixed-width Active Timer module opens details with a visual progress bar, Pa
 
 Center activity cards use equal horizontal/vertical insets and animate opacity and position as the bar's height spring expands or collapses. Dropdowns prepare and lay out their complete glass surface while invisible, then animate the material instead of the native window opacity; this avoids presenting a stale or empty HWND frame on open.
 
-Windows does not provide a supported API for a third-party shell to enumerate and re-host notification icons owned by other applications. `Shell_NotifyIcon` lets each owner add or update its own icon and receive its own callbacks; it does not expose a consumer-side tray feed. A complete top-bar tray therefore requires an unsupported Explorer/application hook or cooperation from every tray application. GlassShell keeps the native tray reachable until that architectural choice is made.
+Windows does not provide a supported API for a third-party shell to enumerate and re-host notification icons owned by other applications. GlassShell now includes an experimental x64 Explorer hook modeled on the architecture used by Seelen UI. It observes `Shell_TrayWnd` registration messages, copies icon metadata into the top-bar process, broadcasts `TaskbarCreated` to recover existing registrations, and forwards clicks to the original owner window. Built-in indicators that bypass `Shell_NotifyIcon`, applications that fail to re-register, elevated-process boundaries, Explorer restarts, and future private-payload changes still need hardening. Explorer's tray remains visible as a recovery path.
