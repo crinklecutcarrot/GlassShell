@@ -43,7 +43,14 @@ internal sealed class MediaService : IDisposable
     public event Action? Changed;
     public async Task Initialize()
     {
-        try { foreach (string key in JsonSerializer.Deserialize<string[]>(Storage.Read("liked-songs.json")) ?? Array.Empty<string>()) likedSongs.Add(key); manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); await Refresh(); }
+        try
+        {
+            string saved = Storage.Read("liked-songs.json");
+            if (!string.IsNullOrWhiteSpace(saved))
+                foreach (string key in JsonSerializer.Deserialize<string[]>(saved) ?? Array.Empty<string>()) likedSongs.Add(key);
+        }
+        catch (Exception ex) { Storage.Log("Saved songs: " + ex.Message); }
+        try { manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); await Refresh(); }
         catch (Exception ex) { Storage.Log("Media: " + ex.Message); }
     }
     public async Task Refresh()
@@ -52,9 +59,16 @@ internal sealed class MediaService : IDisposable
         busy = true;
         try
         {
-            var selected = manager.GetCurrentSession();
+            var selected = manager.GetCurrentSession(); int best = -1;
             foreach (var item in manager.GetSessions())
-                if (item.SourceAppUserModelId.Contains("chrome", StringComparison.OrdinalIgnoreCase)) { selected = item; break; }
+            {
+                var playback = item.GetPlaybackInfo().PlaybackStatus;
+                int score = playback == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing ? 100 :
+                    playback == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused ? 70 : 0;
+                if (item.SourceAppUserModelId.Contains("chrome", StringComparison.OrdinalIgnoreCase)) score += 10;
+                if (item == manager.GetCurrentSession()) score++;
+                if (score > best) { best = score; selected = item; }
+            }
             session = selected;
             if (session == null) { HoldOrClear(); return; }
             var properties = await session.TryGetMediaPropertiesAsync();
@@ -94,6 +108,7 @@ internal sealed class MediaService : IDisposable
             // Commit one coherent update after asynchronous thumbnail retrieval.
             string nextTitle = properties.Title, nextArtist = properties.Artist;
             bool trackChanged = !string.IsNullOrWhiteSpace(Title) && (!string.Equals(Title, nextTitle, StringComparison.Ordinal) || !string.Equals(Artist, nextArtist, StringComparison.Ordinal));
+            bool becameAvailable = !Available;
             Available = true; Playing = playing; Paused = paused;
             Title = nextTitle; Artist = nextArtist; AlbumArt = artwork; artworkHash = hash;
             if (trackChanged) { TrackDirection = requestedDirection < 0 ? -1 : 1; requestedDirection = 0; TrackRevision++; }
@@ -102,6 +117,7 @@ internal sealed class MediaService : IDisposable
             Start = timeline.StartTime; End = timeline.EndTime; observedPosition = timeline.Position;
             observedAt = timeline.LastUpdatedTime > DateTimeOffset.UtcNow.AddHours(-12) && timeline.LastUpdatedTime <= DateTimeOffset.UtcNow ? timeline.LastUpdatedTime : DateTimeOffset.UtcNow;
             lastValidMedia = DateTimeOffset.UtcNow;
+            if (becameAvailable || trackChanged) Storage.Log($"Media selected: {session.SourceAppUserModelId} — {Title}");
             if (!disposed) Changed?.Invoke();
         }
         catch (Exception ex) { Storage.Log("Media refresh: " + ex.Message); }
