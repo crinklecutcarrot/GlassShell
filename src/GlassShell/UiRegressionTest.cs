@@ -64,12 +64,21 @@ internal sealed class UiRegressionTest
             s.OpenActiveTimer(); await Capture(s.Alert, "timer-expired.png"); checks["reopen expired"] = s.Alert.IsOpen; s.Model.ResetTimer(); await Task.Delay(260); checks["stop clears timer and popup"] = !s.Bar.TimerVisible && !s.Alert.IsOpen;
             s.Tray.SetTestIcon(s.Bar.Handle);
             foreach (var page in new[] { "widgets", "timer", "notes", "controls", "notifications" }) { s.OpenPanel(page); await Task.Delay(180); if (page == "notes") { foreach (var child in ((System.Windows.Controls.StackPanel)s.Panel.Glass.Content.Children[0]).Children) if (child is TextBox note) { note.Text = "Isolated autosave check"; checks["note autosaves"] = Storage.Read("quick-note.txt") == note.Text; } } checks[page + " opens below bar"] = s.Panel.IsOpen && s.Panel.Top + 1 >= s.Bar.Top + s.Bar.VisualHeight; s.Panel.Dismiss(); await Task.Delay(150); checks[page + " dismisses"] = !s.Panel.IsOpen; }
+            s.OpenPanel("controls"); await Task.Delay(220); await Capture(s.Panel, "control-center.png");
+            s.Panel.Navigate("wifi"); await Task.Delay(220); checks["wifi subpage stays in panel"] = s.Panel.IsOpen && s.Panel.CurrentPage == "wifi"; checks["wifi test network rendered"] = FindText(s.Panel, "Test Network"); await Capture(s.Panel, "wifi-panel.png");
+            s.Panel.Navigate("bluetooth"); await Task.Delay(220); checks["bluetooth subpage stays in panel"] = s.Panel.IsOpen && s.Panel.CurrentPage == "bluetooth"; checks["bluetooth test device rendered"] = FindText(s.Panel, "Test Headphones"); await Capture(s.Panel, "bluetooth-panel.png"); s.Panel.Dismiss(); await Task.Delay(160);
             s.Tray.ShowNativeOverflow(); checks["top tray requests native flyout"] = s.Tray.NativeFlyoutRequested;
             s.Media.SetTestState(false); checks["activity remains during exit animation"] = music.Visibility == Visibility.Visible; await Task.Delay(1000); checks["idle restored"] = !s.Bar.MusicVisible && s.Bar.ReservedHeight == 36;
             fixture.Close(); fixture = null;
         }
         catch (Exception ex) { error = ex.ToString(); }
         finally { fixture?.Close(); SetCursorPos(originalCursor.X, originalCursor.Y); Directory.CreateDirectory("artifacts/ui-regression"); File.WriteAllText("artifacts/ui-regression/report.json", JsonSerializer.Serialize(new { checks, error }, new JsonSerializerOptions { WriteIndented = true })); s.Bar.Unregister(); await Task.Delay(300); var monitor = new Native.MonitorInfo { Size = Marshal.SizeOf<Native.MonitorInfo>() }; Native.GetMonitorInfo(Native.MonitorFromWindow(s.Bar.Handle, 1), ref monitor); checks["reservation released"] = monitor.Work.Top == monitor.Monitor.Top; File.WriteAllText("artifacts/ui-regression/report.json", JsonSerializer.Serialize(new { checks, error }, new JsonSerializerOptions { WriteIndented = true })); s.Exit(); }
+    }
+    static bool FindText(DependencyObject parent, string text)
+    {
+        if (parent is TextBlock label && label.Text.Contains(text, StringComparison.Ordinal)) return true;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++) if (FindText(VisualTreeHelper.GetChild(parent, i), text)) return true;
+        return false;
     }
 }
 

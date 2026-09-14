@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -8,7 +9,7 @@ namespace GlassShell;
 
 internal sealed class PanelWindow : ShellWindow
 {
-    readonly ShellController owner; string current = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist; Slider? seek; RoundedImage? art; StackPanel? musicLabels; Button? play, pause, prev, next, like; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation; double panelHeight = 410;
+    readonly ShellController owner; string current = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist; Slider? seek; RoundedImage? art; StackPanel? musicLabels, connectivityBody; Button? play, pause, prev, next, like; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation; double panelHeight = 410;
     public string CurrentPage => current; public bool IsOpen { get; private set; }
     public int PresentationVersion { get; private set; }
     public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; }
@@ -43,16 +44,32 @@ internal sealed class PanelWindow : ShellWindow
         SetInput(page == "notes");
         if (note != null) note.Focus();
     }
+    public void Navigate(string page)
+    {
+        if (!IsOpen) { Open(page); return; }
+        if (!SaveNote()) return;
+        current = page; PresentationVersion++; Build(); PositionSurface(); UpdateLayout(); Tick();
+        if (Glass.Content.Children.Count > 0 && Glass.Content.Children[0] is FrameworkElement content)
+        {
+            var move = new TranslateTransform(12, 0); content.RenderTransform = move; content.Opacity = 0;
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            content.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(170)) { EasingFunction = ease });
+            move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(12, 0, TimeSpan.FromMilliseconds(210)) { EasingFunction = ease });
+        }
+    }
     public bool SaveNote() { if (note == null) return true; try { Storage.Write("quick-note.txt", note.Text); return true; } catch (Exception e) { Storage.Log("Save note: " + e); if (live != null) live.Text = "Could not save. Your note is still open."; return false; } }
     public void Dismiss() { if (!IsOpen || !SaveNote()) return; SetInput(false); IsOpen = false; IsHitTestVisible = false; int version = ++PresentationVersion; var fade = new DoubleAnimation(Glass.Opacity, 0, TimeSpan.FromMilliseconds(150)); fade.Completed += (_, _) => { if (version == PresentationVersion && !IsOpen) { Opacity = 0; Hide(); } }; Glass.BeginAnimation(OpacityProperty, fade); if (Glass.RenderTransform is TranslateTransform translate) translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -5, TimeSpan.FromMilliseconds(150))); }
     public void HideImmediately() { if (!SaveNote()) return; IsOpen = false; PresentationVersion++; SetInput(false); Glass.BeginAnimation(OpacityProperty, null); Glass.Opacity = 0; BeginAnimation(OpacityProperty, null); Opacity = 0; Hide(); }
     public void RefreshTray() { if (IsOpen && current == "tray") { Build(); PositionSurface(); UpdateLayout(); } }
-    public override void PositionSurface() { double anchor = owner.Bar.AnchorCenter(current); Left = Math.Clamp(anchor - Width / 2, owner.Bar.Left + 8, owner.Bar.Left + owner.Bar.Width - Width - 8); Top = owner.Bar.Top + owner.Bar.VisualHeight + 8; Shape(0, 0, Width, panelHeight, 25); }
+    public void RefreshConnectivity() { if (IsOpen && connectivityBody != null && current is "controls" or "wifi" or "bluetooth") PopulateConnectivity(); }
+    public override void PositionSurface() { double anchor = owner.Bar.AnchorCenter(current is "wifi" or "bluetooth" ? "controls" : current); Left = Math.Clamp(anchor - Width / 2, owner.Bar.Left + 8, owner.Bar.Left + owner.Bar.Width - Width - 8); Top = owner.Bar.Top + owner.Bar.VisualHeight + 8; Shape(0, 0, Width, panelHeight, 25); }
     void Build()
     {
         var trayIcons = current == "tray" ? owner.Tray.Icons : Array.Empty<TrayIconItem>();
-        panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 330, "notifications" => 260, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; note = null; live = elapsed = total = musicTitle = musicArtist = null; timerProgress = null; addMinute = null; seek = null; art = null; musicLabels = null; play = pause = prev = next = like = null; dragging = false;
-        var body = new StackPanel { Margin = new Thickness(24) }; var header = new Grid(); header.Children.Add(Ui.Text(current switch { "music" => "Now playing", "active-timer" => "Active Timer", "timer" => "Timer", "notes" => "Notes", "widgets" => "Widgets", "controls" => "Control Center", "notifications" => "Notifications", "tray" => "Background apps", _ => "GlassShell" }, 22, weight: FontWeights.SemiBold)); var close = Ui.Icon("x", "Close", Dismiss, 30); close.HorizontalAlignment = HorizontalAlignment.Right; header.Children.Add(close); body.Children.Add(header); body.Children.Add(new Border { Height = 18 });
+        panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 330, "notifications" => 260, "controls" => 400, "wifi" or "bluetooth" => 490, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; note = null; live = elapsed = total = musicTitle = musicArtist = null; timerProgress = null; addMinute = null; seek = null; art = null; musicLabels = connectivityBody = null; play = pause = prev = next = like = null; dragging = false;
+        var body = new StackPanel { Margin = new Thickness(24) }; var header = new Grid();
+        if (current is "wifi" or "bluetooth") { var back = Ui.Icon("arrow-left", "Back to Control Center", () => Navigate("controls"), 34); back.HorizontalAlignment = HorizontalAlignment.Left; back.Margin = new Thickness(-3, -3, 0, -3); header.Children.Add(back); }
+        var heading = Ui.Text(current switch { "music" => "Now playing", "active-timer" => "Active Timer", "timer" => "Timer", "notes" => "Notes", "widgets" => "Widgets", "controls" => "Control Center", "wifi" => "Wi‑Fi", "bluetooth" => "Bluetooth", "notifications" => "Notifications", "tray" => "Background apps", _ => "GlassShell" }, 22, weight: FontWeights.SemiBold); if (current is "wifi" or "bluetooth") heading.Margin = new Thickness(44, 0, 0, 0); header.Children.Add(heading); var close = Ui.Icon("x", "Close", Dismiss, 30); close.HorizontalAlignment = HorizontalAlignment.Right; header.Children.Add(close); body.Children.Add(header); body.Children.Add(new Border { Height = 18 });
         switch (current)
         {
             case "active-timer":
@@ -82,7 +99,9 @@ internal sealed class PanelWindow : ShellWindow
                 elapsed = Ui.Text("", 11, Ui.Muted); total = Ui.Text("", 11, Ui.Muted); var times = new Grid(); times.Children.Add(elapsed); total.HorizontalAlignment = HorizontalAlignment.Right; times.Children.Add(total); body.Children.Add(times);
                 prev = Ui.Icon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 46); play = Ui.Icon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 52); next = Ui.Icon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 46); var transport = Ui.Row(prev, play, next); transport.HorizontalAlignment = HorizontalAlignment.Center; transport.Margin = new Thickness(0, 18, 0, 0); body.Children.Add(transport); break;
             case "widgets": body.Children.Add(Ui.Text("Your widgets will live here.", 14, Ui.Muted)); break;
-            case "controls": body.Children.Add(Ui.Row(Ui.ActionButton("wifi", "Wi-Fi settings", () => Ui.Open("ms-settings:network-wifi"), 174, 58), Ui.ActionButton("bluetooth", "Bluetooth settings", () => Ui.Open("ms-settings:bluetooth"), 174, 58))); body.Children.Add(Ui.Row(Ui.ActionButton("volume", "Sound settings", () => Ui.Open("ms-settings:sound"), 174, 58), Ui.ActionButton("device-desktop", "Display settings", () => Ui.Open("ms-settings:display"), 174, 58))); body.Children.Add(Ui.Row(Ui.Icon("volume-2", "Volume down", () => Native.Shortcut(0xAE, false), 52), Ui.Icon("volume-off", "Mute", () => Native.Shortcut(0xAD, false), 52), Ui.Icon("volume", "Volume up", () => Native.Shortcut(0xAF, false), 52))); body.Children.Add(Ui.Button("Open Windows quick settings", () => { HideImmediately(); Native.Shortcut(0x41); }, 350)); break;
+            case "controls":
+            case "wifi":
+            case "bluetooth": connectivityBody = new StackPanel(); body.Children.Add(connectivityBody); PopulateConnectivity(); break;
             case "notifications": var info = Ui.Text("Notification history isn’t connected yet. Your Windows banners and history remain available.", 14, Ui.Muted); info.TextWrapping = TextWrapping.Wrap; body.Children.Add(info); body.Children.Add(Ui.Button("Open Windows notification history", () => { HideImmediately(); Native.Shortcut(0x4E); }, 350, 44)); break;
             case "tray":
                 if (!owner.Tray.Available)
@@ -111,6 +130,60 @@ internal sealed class PanelWindow : ShellWindow
         }
         Glass.Content.Children.Add(body);
     }
+    void PopulateConnectivity()
+    {
+        if (connectivityBody == null) return; connectivityBody.Children.Clear(); var c = owner.Connectivity;
+        if (current == "controls")
+        {
+            connectivityBody.Children.Add(Ui.Row(
+                ConnectivityTile("wifi", "Wi‑Fi", c.WifiOn ? ConnectedWifiLabel(c) : "Off", () => { Navigate("wifi"); _ = c.RefreshWifi(); }),
+                ConnectivityTile("bluetooth", "Bluetooth", c.BluetoothOn ? ConnectedBluetoothLabel(c) : "Off", () => { Navigate("bluetooth"); _ = c.RefreshBluetooth(); })));
+            connectivityBody.Children.Add(Ui.Row(Ui.ActionButton("volume", "Sound settings", () => Ui.Open("ms-settings:sound"), 174, 62), Ui.ActionButton("device-desktop", "Display settings", () => Ui.Open("ms-settings:display"), 174, 62)));
+            var volume = Ui.Row(Ui.Icon("volume-2", "Volume down", () => Native.Shortcut(0xAE, false), 52), Ui.Icon("volume-off", "Mute", () => Native.Shortcut(0xAD, false), 52), Ui.Icon("volume", "Volume up", () => Native.Shortcut(0xAF, false), 52)); volume.HorizontalAlignment = HorizontalAlignment.Center; volume.Margin = new Thickness(0, 10, 0, 10); connectivityBody.Children.Add(volume);
+            connectivityBody.Children.Add(Ui.Button("Open Windows quick settings", () => { HideImmediately(); Native.Shortcut(0x41); }, 350, 42)); return;
+        }
+        bool wifi = current == "wifi"; bool on = wifi ? c.WifiOn : c.BluetoothOn; bool busy = wifi ? c.WifiBusy : c.BluetoothBusy;
+        var radio = new Grid { Margin = new Thickness(0, 0, 0, 12) }; radio.ColumnDefinitions.Add(new ColumnDefinition()); radio.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var radioText = new StackPanel(); radioText.Children.Add(Ui.Text(wifi ? "Wi‑Fi" : "Bluetooth", 16, weight: FontWeights.SemiBold)); radioText.Children.Add(Ui.Text(on ? "On" : "Off", 12, Ui.Muted)); radio.Children.Add(radioText);
+        var toggle = Ui.Button(on ? "On" : "Off", () => _ = c.ToggleRadio(wifi ? Windows.Devices.Radios.RadioKind.WiFi : Windows.Devices.Radios.RadioKind.Bluetooth), 70, 38); toggle.IsEnabled = !busy; toggle.SetValue(Ui.IsSelectedProperty, on); Grid.SetColumn(toggle, 1); radio.Children.Add(toggle); connectivityBody.Children.Add(Card(radio, new Thickness(14)));
+        var list = new StackPanel();
+        if (wifi)
+        {
+            foreach (var network in c.Networks) list.Children.Add(WifiRow(network));
+            if (!string.IsNullOrEmpty(c.WifiMessage)) list.Children.Add(Message(c.WifiMessage));
+        }
+        else
+        {
+            foreach (var device in c.BluetoothDevices) list.Children.Add(BluetoothRow(device));
+            if (!string.IsNullOrEmpty(c.BluetoothMessage)) list.Children.Add(Message(c.BluetoothMessage));
+        }
+        var scroll = new ScrollViewer { Content = list, Height = 225, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }; connectivityBody.Children.Add(scroll);
+        var footer = new Grid { Margin = new Thickness(0, 10, 0, 0) }; footer.ColumnDefinitions.Add(new ColumnDefinition()); footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var settings = Ui.Button(wifi ? "More Wi‑Fi settings" : "More Bluetooth settings", () => Ui.Open(wifi ? "ms-settings:network-wifi" : "ms-settings:bluetooth"), 285, 38); settings.HorizontalContentAlignment = HorizontalAlignment.Left; settings.Margin = new Thickness(0, 3, 3, 3); footer.Children.Add(settings);
+        var refresh = Ui.Icon("refresh", wifi ? "Scan for networks" : "Refresh devices", () => { if (wifi) _ = c.RefreshWifi(); else _ = c.RefreshBluetooth(); }, 38); refresh.IsEnabled = !busy; Grid.SetColumn(refresh, 1); footer.Children.Add(refresh); connectivityBody.Children.Add(footer);
+    }
+    Button ConnectivityTile(string icon, string title, string status, Action action)
+    {
+        var button = Ui.Button("", action, 174, 74); var labels = new StackPanel { Margin = new Thickness(9, 0, 0, 0), Width = 112 }; labels.Children.Add(Ui.Text(title, 14, weight: FontWeights.SemiBold)); labels.Children.Add(Ui.Text(status, 11, Ui.Muted)); button.Content = Ui.Row(TablerIcon.Create(icon, 20), labels); return button;
+    }
+    UIElement WifiRow(WifiNetwork network)
+    {
+        var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) }); grid.ColumnDefinitions.Add(new ColumnDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var icon = TablerIcon.Create("wifi", 21, network.Connected ? Ui.Accent : Ui.White); icon.VerticalAlignment = VerticalAlignment.Center; grid.Children.Add(icon);
+        var labels = new StackPanel(); labels.Children.Add(Ui.Text(network.Ssid, 14, weight: network.Connected ? FontWeights.SemiBold : FontWeights.Normal)); labels.Children.Add(Ui.Text(network.Connected ? $"Connected · {network.Signal}%" : network.Secure ? $"Secured · {network.Signal}%" : $"Open · {network.Signal}%", 11, Ui.Muted)); Grid.SetColumn(labels, 1); grid.Children.Add(labels);
+        var action = network.Connected ? Ui.Button("Disconnect", () => _ = owner.Connectivity.DisconnectWifi(), 92, 36) : Ui.Button(network.Saved ? "Connect" : "Details", () => _ = owner.Connectivity.ConnectWifi(network.Ssid), 76, 36); Grid.SetColumn(action, 2); grid.Children.Add(action); return Card(grid, new Thickness(12));
+    }
+    UIElement BluetoothRow(BluetoothItem device)
+    {
+        var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) }); grid.ColumnDefinitions.Add(new ColumnDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var icon = TablerIcon.Create("bluetooth", 21, device.Connected ? Ui.Accent : Ui.White); icon.VerticalAlignment = VerticalAlignment.Center; grid.Children.Add(icon);
+        var labels = new StackPanel(); labels.Children.Add(Ui.Text(device.Name, 14, weight: device.Connected ? FontWeights.SemiBold : FontWeights.Normal)); labels.Children.Add(Ui.Text(device.Connected ? "Connected" : device.Paired ? "Paired" : "Available", 11, Ui.Muted)); Grid.SetColumn(labels, 1); grid.Children.Add(labels);
+        var settings = Ui.Icon("external-link", "Manage device in Windows settings", () => Ui.Open("ms-settings:bluetooth"), 36); Grid.SetColumn(settings, 2); grid.Children.Add(settings); return Card(grid, new Thickness(12));
+    }
+    static Border Card(UIElement child, Thickness padding) => new() { Child = child, Padding = padding, Margin = new Thickness(0, 0, 0, 7), CornerRadius = new CornerRadius(13), Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)), BorderBrush = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)), BorderThickness = new Thickness(1) };
+    static Border Message(string text) { var label = Ui.Text(text, 13, Ui.Muted); label.TextWrapping = TextWrapping.Wrap; label.TextTrimming = TextTrimming.None; return Card(label, new Thickness(14)); }
+    static string ConnectedWifiLabel(ConnectivityService c) => c.Networks.FirstOrDefault(x => x.Connected)?.Ssid ?? (c.WifiBusy ? "Scanning…" : "On");
+    static string ConnectedBluetoothLabel(ConnectivityService c) => c.BluetoothDevices.FirstOrDefault(x => x.Connected)?.Name ?? (c.BluetoothBusy ? "Refreshing…" : "On");
     void UpdateSeek(double x) { if (seek != null) seek.Value = Math.Clamp((x - 6) / Math.Max(1, seek.ActualWidth - 12), 0, 1); }
     static void StyleSeek(Slider slider)
     {
