@@ -14,6 +14,7 @@ internal sealed class PanelWindow : ShellWindow
     public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; }
     public void Open(string page)
     {
+        if (page == "tray") owner.Tray.RefreshBackfill();
         if (IsOpen && current == page) { Dismiss(); return; }
         if (!SaveNote()) return;
         PresentationVersion++;

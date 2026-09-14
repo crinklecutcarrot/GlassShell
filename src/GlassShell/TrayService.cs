@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -21,6 +24,8 @@ internal sealed class TrayIconItem
     public string Tooltip { get; set; } = "Background app";
     public ImageSource? Image { get; set; }
     public bool Visible { get; set; } = true;
+    public bool Backfilled { get; set; }
+    public string AutomationName { get; set; } = "";
 }
 
 internal sealed class TrayService : IDisposable
@@ -30,9 +35,10 @@ internal sealed class TrayService : IDisposable
     const uint NifMessage = 1, NifIcon = 2, NifTip = 4, NifGuid = 0x20;
     readonly Dictionary<string, TrayIconItem> icons = new(StringComparer.OrdinalIgnoreCase);
     IntPtr module, hook;
+    int backfillRunning;
     bool testAvailable;
     public bool Available => hook != IntPtr.Zero || testAvailable;
-    public IReadOnlyList<TrayIconItem> Icons => icons.Values.Where(icon => Native.IsWindow(icon.Owner)).OrderBy(icon => icon.Tooltip).ToArray();
+    public IReadOnlyList<TrayIconItem> Icons => icons.Values.Where(icon => icon.Backfilled || Native.IsWindow(icon.Owner)).OrderBy(icon => icon.Tooltip).ToArray();
     public event Action? Changed;
 
     public void Start()
@@ -60,6 +66,13 @@ internal sealed class TrayService : IDisposable
         Storage.Log("Tray hook installed on Explorer thread " + thread);
         uint taskbarCreated = Native.RegisterWindowMessage("TaskbarCreated");
         SendNotifyMessage(new IntPtr(0xffff), taskbarCreated, UIntPtr.Zero, IntPtr.Zero);
+        _ = Task.Run(() => { Thread.Sleep(900); RefreshBackfill(); });
+    }
+
+    public void RefreshBackfill()
+    {
+        if (Storage.OverrideRoot == null && Interlocked.CompareExchange(ref backfillRunning, 1, 0) == 0)
+            _ = Task.Run(BackfillFromExplorer);
     }
 
     public bool ProcessCopyData(IntPtr lparam)
@@ -86,6 +99,12 @@ internal sealed class TrayService : IDisposable
             item = new TrayIconItem { Key = key, Owner = new IntPtr(unchecked((long)data.Owner)), Uid = data.Uid, Guid = data.Guid };
             icons[key] = item;
         }
+        if (added && !string.IsNullOrWhiteSpace(data.Tooltip))
+        {
+            string? fallback = icons.FirstOrDefault(pair => pair.Value.Backfilled &&
+                string.Equals(pair.Value.AutomationName, data.Tooltip.Trim(), StringComparison.OrdinalIgnoreCase)).Key;
+            if (fallback != null) icons.Remove(fallback);
+        }
         if (data.Owner != 0) item.Owner = new IntPtr(unchecked((long)data.Owner));
         if (data.Uid != 0 || item.Uid == 0) item.Uid = data.Uid;
         if ((data.Flags & NifMessage) != 0) item.Callback = data.Callback;
@@ -109,6 +128,7 @@ internal sealed class TrayService : IDisposable
     public void SendAction(TrayIconItem icon, string action)
     {
         if (Storage.OverrideRoot != null) { LastTestAction = action; return; }
+        if (icon.Backfilled) { _ = Task.Run(() => ActivateBackfilled(icon.AutomationName, action)); return; }
         if (!Native.IsWindow(icon.Owner) || icon.Callback == 0) return;
         Native.GetWindowThreadProcessId(icon.Owner, out uint processId);
         AllowSetForegroundWindow(processId);
@@ -154,6 +174,110 @@ internal sealed class TrayService : IDisposable
         SendNotifyMessage(icon.Owner, icon.Callback, wparam, lparam);
     }
 
+    void BackfillFromExplorer()
+    {
+        try
+        {
+            var entries = OpenOverflowAndFindIcons();
+            var found = new List<(string Name, ImageSource? Image)>();
+            foreach (AutomationElement element in entries)
+            {
+                string name = element.Current.Name?.Trim() ?? "";
+                if (name.Length > 0) found.Add((name, CaptureElement(element)));
+            }
+            CloseOverflow();
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                int added = 0;
+                foreach (var entry in found)
+                {
+                    if (icons.Values.Any(icon => string.Equals(icon.Tooltip, entry.Name, StringComparison.OrdinalIgnoreCase))) continue;
+                    string key = "uia_" + entry.Name;
+                    int suffix = 2; while (icons.ContainsKey(key)) key = "uia_" + entry.Name + "_" + suffix++;
+                    icons[key] = new TrayIconItem { Key = key, Tooltip = entry.Name, AutomationName = entry.Name,
+                        Backfilled = true, Image = entry.Image };
+                    added++;
+                }
+                if (added > 0) { Storage.Log($"Tray UI Automation backfill added {added} icons"); Changed?.Invoke(); }
+            }));
+        }
+        catch (Exception ex) { CloseOverflow(); Storage.Log("Tray backfill: " + ex.Message); }
+        finally { Interlocked.Exchange(ref backfillRunning, 0); }
+    }
+
+    static AutomationElementCollection OpenOverflowAndFindIcons()
+    {
+        var root = AutomationElement.RootElement;
+        var chevrons = root.FindAll(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.AutomationIdProperty, "SystemTrayIcon"));
+        foreach (AutomationElement candidate in chevrons)
+        {
+            if (!(candidate.Current.Name?.StartsWith("Show Hidden Icons", StringComparison.OrdinalIgnoreCase) ?? false)) continue;
+            if (candidate.TryGetCurrentPattern(InvokePattern.Pattern, out object pattern))
+                ((InvokePattern)pattern).Invoke();
+            break;
+        }
+        Thread.Sleep(350);
+        return root.FindAll(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.AutomationIdProperty, "NotifyItemIcon"));
+    }
+
+    static void CloseOverflow()
+    {
+        try
+        {
+            var root = AutomationElement.RootElement;
+            var chevrons = root.FindAll(TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.AutomationIdProperty, "SystemTrayIcon"));
+            foreach (AutomationElement candidate in chevrons)
+            {
+                string name = candidate.Current.Name ?? "";
+                if (!name.StartsWith("Show Hidden Icons", StringComparison.OrdinalIgnoreCase) ||
+                    !name.Contains("Hide", StringComparison.OrdinalIgnoreCase)) continue;
+                if (candidate.TryGetCurrentPattern(InvokePattern.Pattern, out object pattern))
+                    ((InvokePattern)pattern).Invoke();
+                break;
+            }
+        }
+        catch { }
+    }
+
+    static ImageSource? CaptureElement(AutomationElement element)
+    {
+        try
+        {
+            var r = element.Current.BoundingRectangle;
+            if (r.Width < 1 || r.Height < 1) return null;
+            using var bitmap = new System.Drawing.Bitmap((int)Math.Ceiling(r.Width), (int)Math.Ceiling(r.Height));
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                graphics.CopyFromScreen((int)r.Left, (int)r.Top, 0, 0, bitmap.Size);
+            IntPtr handle = bitmap.GetHbitmap();
+            try { var image = Imaging.CreateBitmapSourceFromHBitmap(handle, IntPtr.Zero, Int32Rect.Empty,
+                BitmapSizeOptions.FromWidthAndHeight(24, 24)); image.Freeze(); return image; }
+            finally { DeleteObject(handle); }
+        }
+        catch { return null; }
+    }
+
+    static void ActivateBackfilled(string name, string action)
+    {
+        try
+        {
+            var entries = OpenOverflowAndFindIcons(); AutomationElement? match = null;
+            foreach (AutomationElement element in entries)
+                if (string.Equals(element.Current.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)) { match = element; break; }
+            if (match == null) { CloseOverflow(); return; }
+            var r = match.Current.BoundingRectangle;
+            int x = (int)(r.Left + r.Width / 2), y = (int)(r.Top + r.Height / 2);
+            SetCursorPos(x, y);
+            uint down = action == "right" ? 0x0008u : action == "middle" ? 0x0020u : 0x0002u;
+            uint up = action == "right" ? 0x0010u : action == "middle" ? 0x0040u : 0x0004u;
+            mouse_event(down, 0, 0, 0, UIntPtr.Zero); mouse_event(up, 0, 0, 0, UIntPtr.Zero);
+            if (action == "double") { Thread.Sleep(60); mouse_event(down, 0, 0, 0, UIntPtr.Zero); mouse_event(up, 0, 0, 0, UIntPtr.Zero); }
+        }
+        catch { CloseOverflow(); }
+    }
+
     public void Dispose()
     {
         if (hook != IntPtr.Zero) { UnhookWindowsHookEx(hook); hook = IntPtr.Zero; }
@@ -179,4 +303,7 @@ internal sealed class TrayService : IDisposable
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string? className, string? title);
     [DllImport("user32.dll")] static extern bool SendNotifyMessage(IntPtr hwnd, uint message, nuint wparam, nint lparam);
     [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(uint processId);
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr handle);
 }
