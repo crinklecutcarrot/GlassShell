@@ -17,6 +17,7 @@ internal sealed class YouTubeMusicBridge : IDisposable
     int togglePending;
     readonly object commandLock = new();
     (int from, int to)? movePending;
+    int playPending = -1;
     DateTimeOffset lastSeen;
     public bool Connected => DateTimeOffset.UtcNow - lastSeen < TimeSpan.FromSeconds(4);
     public event Action<bool>? LikeStateChanged;
@@ -34,6 +35,7 @@ internal sealed class YouTubeMusicBridge : IDisposable
 
     public void ToggleLike() => Interlocked.Exchange(ref togglePending, 1);
     public void MoveQueue(int from, int to) { lock (commandLock) movePending = (from, to); }
+    public void PlayQueue(int index) => Interlocked.Exchange(ref playPending, index);
 
     async Task Listen(CancellationToken token)
     {
@@ -62,7 +64,7 @@ internal sealed class YouTubeMusicBridge : IDisposable
             else if (context.Request.Url?.AbsolutePath == "/command")
             {
                 (int from, int to)? move; lock (commandLock) { move = movePending; movePending = null; }
-                await Write(context, JsonSerializer.Serialize(new { toggleLike = Interlocked.Exchange(ref togglePending, 0) == 1, moveQueue = move == null ? null : new { from = move.Value.from, to = move.Value.to } }));
+                int play = Interlocked.Exchange(ref playPending, -1); await Write(context, JsonSerializer.Serialize(new { toggleLike = Interlocked.Exchange(ref togglePending, 0) == 1, moveQueue = move == null ? null : new { from = move.Value.from, to = move.Value.to }, playQueue = play < 0 ? null : new { index = play } }));
             }
             else context.Response.StatusCode = 404;
         }

@@ -8,14 +8,15 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 namespace GlassShell;
 
 internal sealed class PanelWindow : ShellWindow
 {
-    readonly ShellController owner; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation, queueDragFrom = -1; double panelHeight = 410;
+    readonly ShellController owner; readonly DispatcherTimer queueAutoScroll = new() { Interval = TimeSpan.FromMilliseconds(32) }; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; ScrollViewer? queueScroll; Border? queueDragRow; QueueTrack? queueDragTrack; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation, queueDropIndex = -1; double panelHeight = 410, queueDragOpacity; Point queuePointer;
     public string CurrentPage => current; public bool IsOpen { get; private set; }
     public int PresentationVersion { get; private set; }
-    public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; }
+    public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; PreviewMouseMove += QueueDragMove; PreviewMouseLeftButtonUp += QueueDragEnd; queueAutoScroll.Tick += (_, _) => AutoScrollQueue(); }
     public void Open(string page)
     {
         if (page == "tray") owner.Tray.RefreshBackfill();
@@ -69,7 +70,7 @@ internal sealed class PanelWindow : ShellWindow
     void Build()
     {
         var trayIcons = current == "tray" ? owner.Tray.Icons : Array.Empty<TrayIconItem>();
-        bool mediaPage = current is "music" or "queue"; Width = mediaPage ? 350 : 420; panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 400, "queue" => 440, "notifications" => 260, "controls" or "wifi" or "bluetooth" => 400, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; queueSignature = ""; note = null; live = elapsed = total = musicTitle = musicArtist = radioState = queueTitle = queueArtist = null; radioToggle = null; timerProgress = null; addMinute = null; seek = null; art = null; mediaBackdrop = null; musicLabels = connectivityBody = queueList = null; play = pause = prev = next = like = queuePlay = null; dragging = false;
+        EndQueueDrag(false); bool mediaPage = current is "music" or "queue"; Width = mediaPage ? 350 : 420; panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 400, "queue" => 440, "notifications" => 260, "controls" or "wifi" or "bluetooth" => 400, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; queueSignature = ""; note = null; live = elapsed = total = musicTitle = musicArtist = radioState = queueTitle = queueArtist = null; radioToggle = null; timerProgress = null; addMinute = null; seek = null; art = null; mediaBackdrop = null; musicLabels = connectivityBody = queueList = null; queueScroll = null; play = pause = prev = next = like = queuePlay = null; dragging = false;
         if (mediaPage) AddMediaBackdrop();
         var body = new StackPanel { Margin = mediaPage ? new Thickness(18) : new Thickness(24) }; var header = new Grid();
         if (mediaPage) BuildMediaHeader(header);
@@ -110,7 +111,7 @@ internal sealed class PanelWindow : ShellWindow
                 prev = MediaIcon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 46); play = Ui.Button("", () => _ = owner.Media.Control("toggle"), 128, 48); play.Margin = new Thickness(15, 8, 15, 0); play.Background = new SolidColorBrush(Color.FromArgb(64, 255, 255, 255)); next = MediaIcon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 46); var transport = Ui.Row(prev, play, next); transport.HorizontalAlignment = HorizontalAlignment.Center; body.Children.Add(transport); break;
             case "queue":
                 queueArtist = Ui.Text("", 13, Ui.Muted); queueTitle = Ui.Text("", 19, weight: FontWeights.SemiBold); var queueLabels = new StackPanel { Width = 170 }; queueLabels.Children.Add(queueArtist); queueLabels.Children.Add(queueTitle); var queuePrev = MediaIcon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 34); queuePlay = MediaIcon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 36); var queueNext = MediaIcon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 34); var mini = new Grid(); mini.ColumnDefinitions.Add(new ColumnDefinition()); mini.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); mini.Children.Add(queueLabels); var miniControls = Ui.Row(queuePrev, queuePlay, queueNext); Grid.SetColumn(miniControls, 1); mini.Children.Add(miniControls); body.Children.Add(mini);
-                body.Children.Add(new Border { Height = 76 }); var upNext = Ui.Text("Up next", 16, Ui.White, FontWeights.SemiBold); upNext.Margin = new Thickness(2, 0, 0, 10); body.Children.Add(upNext); queueList = new StackPanel(); body.Children.Add(new ScrollViewer { Content = queueList, Height = 235, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly }); PopulateQueue(); break;
+                body.Children.Add(new Border { Height = 12 }); var upNext = Ui.Text("Up next", 16, Ui.White, FontWeights.SemiBold); upNext.Margin = new Thickness(2, 0, 0, 8); body.Children.Add(upNext); queueList = new StackPanel(); queueScroll = new ScrollViewer { Content = queueList, Height = 275, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly }; body.Children.Add(queueScroll); PopulateQueue(); break;
             case "widgets": body.Children.Add(Ui.Text("Your widgets will live here.", 14, Ui.Muted)); break;
             case "controls":
             case "wifi":
@@ -145,7 +146,7 @@ internal sealed class PanelWindow : ShellWindow
     }
     void AddMediaBackdrop()
     {
-        mediaBackdrop = new Image { Width = Width * 1.18, Height = panelHeight * 1.18, Stretch = Stretch.UniformToFill, Opacity = .92, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Effect = new BlurEffect { Radius = 34, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality } };
+        mediaBackdrop = new Image { Width = Width, Height = panelHeight, Stretch = Stretch.UniformToFill, Opacity = .92, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new Point(.5, .5), RenderTransform = new ScaleTransform(1.18, 1.18), Effect = new BlurEffect { Radius = 34, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality } };
         Glass.Content.Children.Add(mediaBackdrop);
         var gradient = new LinearGradientBrush(); gradient.StartPoint = new Point(.5, 0); gradient.EndPoint = new Point(.5, 1); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(118, 5, 8, 12), 0)); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(95, 5, 8, 12), .38)); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(225, 4, 6, 9), 1));
         Glass.Content.Children.Add(new Border { Width = Width, Height = panelHeight, Background = gradient, CornerRadius = new CornerRadius(25) });
@@ -213,33 +214,54 @@ internal sealed class PanelWindow : ShellWindow
     static string ConnectedBluetoothLabel(ConnectivityService c) => c.BluetoothDevices.FirstOrDefault(x => x.Connected)?.Name ?? (c.BluetoothBusy ? "Refreshing…" : "On");
     void PopulateQueue()
     {
-        if (queueList == null) return; string signature = string.Join("\n", owner.Media.Queue.Select(x => $"{x.index}\0{x.title}\0{x.artist}\0{x.artwork}\0{x.duration}\0{x.selected}")); if (signature == queueSignature) return; queueSignature = signature; queueList.Children.Clear();
+        if (queueList == null) return; string signature = string.Join("\n", owner.Media.Queue.Select(x => $"{x.index}\0{x.title}\0{x.artist}\0{x.artwork}\0{x.duration}\0{x.selected}")); if (signature == queueSignature) return; bool initial = queueSignature.Length == 0; queueSignature = signature; queueList.Children.Clear();
         if (owner.Media.Queue.Count == 0)
         {
             string message = owner.Media.LikeConnected ? "Nothing else is queued." : "Reload the GlassShell YouTube Music extension to show your queue."; queueList.Children.Add(Message(message)); return;
         }
         int selectedPosition = owner.Media.Queue.ToList().FindIndex(x => x.selected); int position = 0; foreach (var item in owner.Media.Queue)
         {
-            bool past = selectedPosition >= 0 && position < selectedPosition; var artwork = new RoundedImage(42, 42, 8) { Source = QueueArtwork(item.artwork), Background = new SolidColorBrush(Color.FromArgb(24, 255, 255, 255)) };
+            bool past = selectedPosition >= 0 && position < selectedPosition; var artwork = new RoundedImage(42, 42, 8) { Source = QueueArtwork(item.artwork) ?? (item.selected ? owner.Media.AlbumArt : null), Background = new SolidColorBrush(Color.FromArgb(24, 255, 255, 255)) }; var artworkHost = new Grid { Width = 42, Height = 42 }; artworkHost.Children.Add(artwork); var playOverlay = new Border { Width = 42, Height = 42, CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Color.FromArgb(115, 0, 0, 0)), Opacity = 0, Child = TablerIcon.Create("player-play-filled", 17) }; artworkHost.Children.Add(playOverlay);
             var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; labels.Children.Add(Ui.Text(item.title, 13, weight: item.selected ? FontWeights.SemiBold : FontWeights.Normal)); labels.Children.Add(Ui.Text(item.artist, 11, Ui.Muted));
             var duration = Ui.Text(item.duration, 11, Ui.Muted); duration.HorizontalAlignment = HorizontalAlignment.Right;
             var grip = MediaIcon("grip-vertical", "Drag to reorder", () => { }, 30); grip.Cursor = Cursors.SizeNS;
-            var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) }); Grid.SetColumn(artwork, 0); Grid.SetColumn(labels, 2); Grid.SetColumn(duration, 3); Grid.SetColumn(grip, 4); row.Children.Add(artwork); row.Children.Add(labels); row.Children.Add(duration); row.Children.Add(grip);
-            var surface = new Border { Child = row, Padding = new Thickness(3, 5, 0, 5), Margin = new Thickness(0, 0, 0, 2), CornerRadius = new CornerRadius(10), Opacity = past ? .46 : 1, Tag = item };
+            var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) }); Grid.SetColumn(artworkHost, 0); Grid.SetColumn(labels, 2); Grid.SetColumn(duration, 3); Grid.SetColumn(grip, 4); row.Children.Add(artworkHost); row.Children.Add(labels); row.Children.Add(duration); row.Children.Add(grip);
+            var surface = new Border { Child = row, Padding = new Thickness(3, 5, 0, 5), Margin = new Thickness(0, 0, 0, 7), CornerRadius = new CornerRadius(10), Opacity = past ? .46 : 1, Tag = item, Cursor = Cursors.Hand };
             var hoverStyle = new Style(typeof(Border)); hoverStyle.Setters.Add(new Setter(Border.BackgroundProperty, item.selected ? Ui.WindowsAccentSurface : Brushes.Transparent)); var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true }; hover.Setters.Add(new Setter(Border.BackgroundProperty, item.selected ? Ui.WindowsAccentSurface : new SolidColorBrush(Color.FromArgb(24, 255, 255, 255)))); hoverStyle.Triggers.Add(hover); surface.Style = hoverStyle;
-            grip.PreviewMouseLeftButtonDown += (_, e) => { queueDragFrom = item.index; surface.Opacity = .65; grip.CaptureMouse(); e.Handled = true; };
-            grip.PreviewMouseLeftButtonUp += (_, e) => { int from = queueDragFrom; var point = e.GetPosition(queueList); int target = QueueTargetAt(point.Y); grip.ReleaseMouseCapture(); surface.Opacity = past ? .46 : 1; if (target >= 0) owner.Media.MoveQueue(from, target); queueDragFrom = -1; e.Handled = true; };
-            grip.LostMouseCapture += (_, _) => { surface.Opacity = past ? .46 : 1; queueDragFrom = -1; };
+            surface.MouseEnter += (_, _) => { if (queueDragRow == null) playOverlay.Opacity = 1; }; surface.MouseLeave += (_, _) => playOverlay.Opacity = 0;
+            surface.PreviewMouseLeftButtonUp += (_, e) => { if (queueDragRow == null) { owner.Media.PlayQueue(item.index); e.Handled = true; } };
+            grip.PreviewMouseLeftButtonDown += (_, e) => { StartQueueDrag(surface, item, e.GetPosition(queueScroll)); playOverlay.Opacity = 0; e.Handled = true; };
             queueList.Children.Add(surface); position++;
         }
+        queueList.Children.Add(new Border { Height = queueScroll?.Height ?? 275, IsHitTestVisible = false });
+        if (initial && selectedPosition >= 0 && queueScroll != null) Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => { if (queueList == null || queueScroll == null || selectedPosition >= queueList.Children.Count) return; var row = queueList.Children[selectedPosition] as FrameworkElement; if (row != null) queueScroll.ScrollToVerticalOffset(row.TranslatePoint(new Point(0, 0), queueList).Y); }));
     }
-    int QueueTargetAt(double y)
+    void StartQueueDrag(Border row, QueueTrack track, Point pointer)
     {
-        if (queueList == null) return -1; foreach (UIElement child in queueList.Children) if (child is Border row && row.Tag is QueueTrack item) { var top = row.TranslatePoint(new Point(0, 0), queueList).Y; if (y >= top && y <= top + row.ActualHeight) return item.index; } return -1;
+        queueDragRow = row; queueDragTrack = track; queueDropIndex = track.index; queueDragOpacity = row.Opacity; queuePointer = pointer; row.Opacity = .08; row.BorderBrush = Ui.WindowsAccent; row.BorderThickness = new Thickness(1); Mouse.Capture(this, CaptureMode.SubTree); queueAutoScroll.Start();
+    }
+    void QueueDragMove(object sender, MouseEventArgs e) { if (queueDragRow == null || queueList == null || queueScroll == null || e.LeftButton != MouseButtonState.Pressed) return; queuePointer = e.GetPosition(queueScroll); ReorderQueuePlaceholder(e.GetPosition(queueList).Y); e.Handled = true; }
+    void ReorderQueuePlaceholder(double y)
+    {
+        if (queueDragRow == null || queueList == null) return; var others = queueList.Children.Cast<UIElement>().Where(x => x != queueDragRow && x is Border { Tag: QueueTrack }).ToList(); int insert = others.Count; QueueTrack? target = others.LastOrDefault() is Border last ? last.Tag as QueueTrack : null;
+        for (int i = 0; i < others.Count; i++) { var element = (FrameworkElement)others[i]; double middle = element.TranslatePoint(new Point(0, 0), queueList).Y + element.ActualHeight / 2; if (y < middle) { insert = i; target = (element as Border)?.Tag as QueueTrack; break; } }
+        int currentIndex = queueList.Children.IndexOf(queueDragRow); int desired = insert; if (desired == currentIndex) { if (target != null) queueDropIndex = target.index; return; }
+        var old = others.ToDictionary(x => x, x => ((FrameworkElement)x).TranslatePoint(new Point(0, 0), queueList).Y); queueList.Children.Remove(queueDragRow); queueList.Children.Insert(Math.Clamp(desired, 0, queueList.Children.Count), queueDragRow); queueList.UpdateLayout();
+        foreach (var element in others) { double next = ((FrameworkElement)element).TranslatePoint(new Point(0, 0), queueList).Y; var move = element.RenderTransform as TranslateTransform ?? new TranslateTransform(); element.RenderTransform = move; move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(old[element] - next, 0, TimeSpan.FromMilliseconds(120)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } }); }
+        if (target != null) queueDropIndex = target.index;
+    }
+    void QueueDragEnd(object sender, MouseButtonEventArgs e) { if (queueDragRow == null) return; EndQueueDrag(true); e.Handled = true; }
+    void EndQueueDrag(bool commit)
+    {
+        if (queueDragRow == null) return; var row = queueDragRow; var track = queueDragTrack; int target = queueDropIndex; queueAutoScroll.Stop(); queueDragRow = null; queueDragTrack = null; row.Opacity = queueDragOpacity; row.BorderThickness = new Thickness(0); if (Mouse.Captured == this) Mouse.Capture(null); if (commit && track != null) owner.Media.MoveQueue(track.index, target);
+    }
+    void AutoScrollQueue()
+    {
+        if (queueDragRow == null || queueScroll == null || queueList == null) return; double delta = queuePointer.Y < 32 ? -4 : queuePointer.Y > queueScroll.ActualHeight - 32 ? 4 : 0; if (delta == 0) return; queueScroll.ScrollToVerticalOffset(queueScroll.VerticalOffset + delta); ReorderQueuePlaceholder(queuePointer.Y + queueScroll.VerticalOffset);
     }
     static ImageSource? QueueArtwork(string url)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null; try { var image = new BitmapImage(); image.BeginInit(); image.UriSource = uri; image.DecodePixelWidth = 96; image.CreateOptions = BitmapCreateOptions.DelayCreation; image.EndInit(); return image; } catch { return null; }
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null; try { var image = new BitmapImage(); image.BeginInit(); image.UriSource = uri; image.DecodePixelWidth = 96; image.CacheOption = BitmapCacheOption.OnDemand; image.EndInit(); return image; } catch { return null; }
     }
     void UpdateSeek(double x) { if (seek != null) seek.Value = Math.Clamp((x - 6) / Math.Max(1, seek.ActualWidth - 12), 0, 1); }
     static void StyleSeek(Slider slider)

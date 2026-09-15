@@ -149,6 +149,7 @@ internal sealed class MediaService : IDisposable
         youtubeLiked = !youtubeLiked; if (!testLikeConnected) likeBridge.ToggleLike(); Changed?.Invoke();
     }
     public void MoveQueue(int from, int to) { if (LikeConnected && from >= 0 && to >= 0 && from != to) likeBridge.MoveQueue(from, to); }
+    public void PlayQueue(int index) { if (LikeConnected && index >= 0) likeBridge.PlayQueue(index); }
     public async Task Seek(double fraction)
     {
         if (!CanSeek || Duration <= TimeSpan.Zero) return;
