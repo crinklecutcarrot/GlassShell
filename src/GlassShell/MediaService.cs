@@ -170,7 +170,7 @@ internal sealed class MediaService : IDisposable
         Title = Available ? "A test track" : ""; Artist = Available ? "Test artist" : ""; AlbumArt = artwork;
         Start = TimeSpan.Zero; End = TimeSpan.FromMinutes(4); observedPosition = TimeSpan.FromSeconds(50); observedAt = DateTimeOffset.UtcNow;
         CanToggle = CanNext = CanPrevious = CanSeek = Available; testLikeConnected = Available;
-        Queue = Available ? new[] { new QueueTrack("Earlier test track", "Earlier artist", duration: "2:58", index: 0), new QueueTrack("A test track", "Test artist", duration: "4:00", selected: true, index: 1), new QueueTrack("Next test track", "Next artist", duration: "3:24", index: 2), new QueueTrack("Another test track", "Another artist", duration: "3:20", index: 3), new QueueTrack("Last test track", "Last artist", duration: "3:50", index: 4) } : Array.Empty<QueueTrack>(); Changed?.Invoke();
+        Queue = Available ? new[] { new QueueTrack("Earlier test track", "Earlier artist", duration: "2:58", index: 0), new QueueTrack("A test track", "Test artist", duration: "4:00", selected: true, index: 1), new QueueTrack("Next test track", "Next artist", duration: "3:24", index: 2), new QueueTrack("Another test track", "Another artist", duration: "3:20", index: 3), new QueueTrack("Last test track", "Last artist", duration: "3:50", index: 4) }.Concat(Enumerable.Range(5, 50).Select(i => new QueueTrack($"Queued test track {i}", $"Queue artist {i}", duration: "3:30", index: i))).ToArray() : Array.Empty<QueueTrack>(); Changed?.Invoke();
     }
     internal void SetTestTrack(string title, string artist, int direction = 1)
     {

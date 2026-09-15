@@ -30,7 +30,7 @@ function readYouTubeMusicQueue() {
   }).filter(item => item?.title);
   const current = normalized.findIndex(item => item.selected);
   const first = current >= 0 ? Math.max(0, current - 5) : 0;
-  return normalized.slice(first, current >= 0 ? current + 9 : 14).map((item, offset) => ({ ...item, index: first + offset }));
+  return normalized.slice(first).map((item, offset) => ({ ...item, index: first + offset }));
 }
 
 async function sync() {
