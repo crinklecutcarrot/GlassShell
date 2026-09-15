@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -37,6 +39,7 @@ internal sealed class MediaService : IDisposable
     public int TrackDirection { get; private set; } = 1;
     public bool Liked => LikeConnected && youtubeLiked;
     public bool LikeConnected => testLikeConnected || likeBridge.Connected;
+    public IReadOnlyList<QueueTrack> Queue { get; private set; } = Array.Empty<QueueTrack>();
     public TimeSpan Start { get; private set; }
     public TimeSpan End { get; private set; }
     public TimeSpan Duration => End > Start ? End - Start : TimeSpan.Zero;
@@ -45,6 +48,7 @@ internal sealed class MediaService : IDisposable
     public async Task Initialize()
     {
         likeBridge.LikeStateChanged += liked => Application.Current.Dispatcher.BeginInvoke(new Action(() => { youtubeLiked = liked; Changed?.Invoke(); }));
+        likeBridge.QueueChanged += queue => Application.Current.Dispatcher.BeginInvoke(new Action(() => { if (!Queue.SequenceEqual(queue)) { Queue = queue; Changed?.Invoke(); } }));
         likeBridge.Start();
         try { manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); await Refresh(); }
         catch (Exception ex) { Storage.Log("Media: " + ex.Message); }
@@ -163,7 +167,8 @@ internal sealed class MediaService : IDisposable
         lastValidMedia = DateTimeOffset.UtcNow; Available = playing || paused; Playing = playing; Paused = paused;
         Title = Available ? "A test track" : ""; Artist = Available ? "Test artist" : ""; AlbumArt = artwork;
         Start = TimeSpan.Zero; End = TimeSpan.FromMinutes(4); observedPosition = TimeSpan.FromSeconds(50); observedAt = DateTimeOffset.UtcNow;
-        CanToggle = CanNext = CanPrevious = CanSeek = Available; testLikeConnected = Available; Changed?.Invoke();
+        CanToggle = CanNext = CanPrevious = CanSeek = Available; testLikeConnected = Available;
+        Queue = Available ? new[] { new QueueTrack("Next test track", "Next artist"), new QueueTrack("Another test track", "Another artist"), new QueueTrack("Last test track", "Last artist") } : Array.Empty<QueueTrack>(); Changed?.Invoke();
     }
     internal void SetTestTrack(string title, string artist, int direction = 1)
     {

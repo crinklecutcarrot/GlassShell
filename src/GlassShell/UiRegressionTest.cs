@@ -51,6 +51,7 @@ internal sealed class UiRegressionTest
                 var end = rail.PointToScreen(new Point(rail.ActualWidth * .30, 12)); SetCursorPos((int)end.X, (int)end.Y); await Task.Delay(80); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(160);
                 Storage.Log("Drag seek=" + s.Media.LastTestSeek + " rail=" + rail.Value); checks["drag rail seeks"] = s.Media.LastTestSeek is double d && d < .55;
             }
+            var queueButton = FindVisual<Button>(s.Panel, b => FindText(b, "Queue")); if (queueButton != null) await Press(queueButton.PointToScreen(new Point(queueButton.ActualWidth / 2, queueButton.ActualHeight / 2))); checks["queue button opens subpage"] = s.Panel.CurrentPage == "queue"; checks["queue shows upcoming tracks"] = FindText(s.Panel, "Next test track"); checks["queue keeps compact player controls"] = FindVisual<Button>(s.Panel, b => Equals(b.ToolTip, "Play / pause")) != null; await Capture(s.Panel, "music-queue.png"); s.Panel.Navigate("music"); await Task.Delay(200);
             s.Model.StartTimer(TimeSpan.FromMinutes(25)); await Task.Delay(700); await Capture(s.Bar, "status-bar.png"); await Capture(s.Panel, "music-dropdown.png");
             s.OpenActiveTimer(); await Task.Delay(250); checks["active timer details"] = s.Panel.CurrentPage == "active-timer";
             var timerBody = (StackPanel)s.Panel.Glass.Content.Children[0]; var options = (StackPanel)timerBody.Children[timerBody.Children.Count - 1]; var add = (Button)options.Children[1]; var remaining = s.Model.Remaining;
@@ -72,7 +73,7 @@ internal sealed class UiRegressionTest
             fixture.Close(); fixture = null;
         }
         catch (Exception ex) { error = ex.ToString(); }
-        finally { fixture?.Close(); SetCursorPos(originalCursor.X, originalCursor.Y); Directory.CreateDirectory("artifacts/ui-regression"); File.WriteAllText("artifacts/ui-regression/report.json", JsonSerializer.Serialize(new { checks, error }, new JsonSerializerOptions { WriteIndented = true })); s.Bar.Unregister(); await Task.Delay(300); var monitor = new Native.MonitorInfo { Size = Marshal.SizeOf<Native.MonitorInfo>() }; Native.GetMonitorInfo(Native.MonitorFromWindow(s.Bar.Handle, 1), ref monitor); checks["reservation released"] = monitor.Work.Top == monitor.Monitor.Top; File.WriteAllText("artifacts/ui-regression/report.json", JsonSerializer.Serialize(new { checks, error }, new JsonSerializerOptions { WriteIndented = true })); s.Exit(); }
+        finally { fixture?.Close(); SetCursorPos(originalCursor.X, originalCursor.Y); Directory.CreateDirectory("artifacts/ui-regression"); File.WriteAllText("artifacts/ui-regression/report.json", JsonSerializer.Serialize(new { checks, error }, new JsonSerializerOptions { WriteIndented = true })); s.Bar.Unregister(); await Task.Delay(800); var monitor = new Native.MonitorInfo { Size = Marshal.SizeOf<Native.MonitorInfo>() }; Native.GetMonitorInfo(Native.MonitorFromWindow(s.Bar.Handle, 1), ref monitor); checks["reservation released"] = monitor.Work.Top == monitor.Monitor.Top; File.WriteAllText("artifacts/ui-regression/report.json", JsonSerializer.Serialize(new { checks, error }, new JsonSerializerOptions { WriteIndented = true })); s.Exit(); }
     }
     static bool FindText(DependencyObject parent, string text)
     {

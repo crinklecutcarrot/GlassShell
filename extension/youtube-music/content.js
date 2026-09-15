@@ -16,7 +16,16 @@ function liked() {
   return button?.getAttribute("aria-pressed") === "true" || String(status).toUpperCase() === "LIKE" || label.includes("remove like") || label.includes("unlike");
 }
 
-function publish() { chrome.runtime.sendMessage({ type: "ytm-state", liked: liked() }).catch(() => {}); }
+function queue() {
+  const items = [...document.querySelectorAll("ytmusic-player-queue-item")];
+  const current = items.findIndex(item => item.hasAttribute("selected") || item.getAttribute("play-button-state") === "playing" || item.querySelector("[icon='pause']"));
+  return (current >= 0 ? items.slice(current + 1) : items).map(item => ({
+    title: (item.querySelector("#song-title, .song-title, [slot='title']")?.textContent || "").trim(),
+    artist: (item.querySelector("#byline, .byline, [slot='subtitle']")?.textContent || "").trim()
+  })).filter(item => item.title).slice(0, 8);
+}
+
+function publish() { chrome.runtime.sendMessage({ type: "ytm-state", liked: liked(), queue: queue() }).catch(() => {}); }
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type !== "toggle-like") return;
   const button = likeButton(); if (button) { button.click(); setTimeout(publish, 300); }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -17,6 +18,7 @@ internal sealed class YouTubeMusicBridge : IDisposable
     DateTimeOffset lastSeen;
     public bool Connected => DateTimeOffset.UtcNow - lastSeen < TimeSpan.FromSeconds(4);
     public event Action<bool>? LikeStateChanged;
+    public event Action<IReadOnlyList<QueueTrack>>? QueueChanged;
 
     public void Start()
     {
@@ -51,7 +53,7 @@ internal sealed class YouTubeMusicBridge : IDisposable
             {
                 using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
                 var state = JsonSerializer.Deserialize<State>(await reader.ReadToEndAsync());
-                if (state != null) { lastSeen = DateTimeOffset.UtcNow; LikeStateChanged?.Invoke(state.liked); }
+                if (state != null) { lastSeen = DateTimeOffset.UtcNow; LikeStateChanged?.Invoke(state.liked); QueueChanged?.Invoke(state.queue ?? Array.Empty<QueueTrack>()); }
                 await Write(context, "{\"ok\":true}");
             }
             else if (context.Request.Url?.AbsolutePath == "/command")
@@ -68,6 +70,8 @@ internal sealed class YouTubeMusicBridge : IDisposable
         await context.Response.OutputStream.WriteAsync(bytes);
     }
 
-    sealed class State { public bool liked { get; set; } }
+    sealed class State { public bool liked { get; set; } public QueueTrack[]? queue { get; set; } }
     public void Dispose() { cancellation?.Cancel(); listener.Close(); cancellation?.Dispose(); }
 }
+
+internal sealed record QueueTrack(string title, string artist);

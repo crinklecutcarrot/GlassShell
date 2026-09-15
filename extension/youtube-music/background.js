@@ -1,10 +1,10 @@
 const endpoint = "http://127.0.0.1:45971";
 const headers = { "X-GlassShell-Key": "glass-shell-ytm-v1" };
-let latest = { liked: false };
+let latest = { liked: false, queue: [] };
 let syncing = false;
 
 chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === "ytm-state") { latest = { liked: !!message.liked }; sync(); }
+  if (message?.type === "ytm-state") { latest = { liked: !!message.liked, queue: Array.isArray(message.queue) ? message.queue : [] }; sync(); }
 });
 
 async function sync() {
