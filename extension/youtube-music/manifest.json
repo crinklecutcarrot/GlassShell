@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "GlassShell YouTube Music Bridge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Synchronizes YouTube Music's current like state and queue with GlassShell.",
-  "permissions": ["tabs"],
+  "permissions": ["tabs", "scripting"],
   "host_permissions": ["http://127.0.0.1:45971/*", "https://music.youtube.com/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [{
