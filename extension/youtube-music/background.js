@@ -24,10 +24,12 @@ function readYouTubeMusicQueue() {
     const renderer = item?.playlistPanelVideoRenderer || item?.playlistPanelVideoWrapperRenderer?.primaryRenderer?.playlistPanelVideoRenderer;
     if (!renderer) return null;
     const text = value => value?.runs?.map(run => run.text || "").join("") || value?.simpleText || "";
-    return { title: text(renderer.title).trim(), artist: text(renderer.longBylineText || renderer.shortBylineText).trim(), selected: !!renderer.selected };
+    const artwork = renderer.thumbnail?.thumbnails?.at(-1)?.url || "";
+    return { title: text(renderer.title).trim(), artist: text(renderer.longBylineText || renderer.shortBylineText).trim(), artwork, duration: text(renderer.lengthText).trim(), selected: !!renderer.selected };
   }).filter(item => item?.title);
   const current = normalized.findIndex(item => item.selected);
-  return (current >= 0 ? normalized.slice(current + 1) : normalized).slice(0, 8).map(({ title, artist }) => ({ title, artist }));
+  const first = current >= 0 ? Math.max(0, current - 5) : 0;
+  return normalized.slice(first, current >= 0 ? current + 9 : 14).map((item, offset) => ({ ...item, index: first + offset }));
 }
 
 async function sync() {
@@ -40,7 +42,15 @@ async function sync() {
       const tabs = await chrome.tabs.query({ url: "https://music.youtube.com/*" });
       for (const tab of tabs) chrome.tabs.sendMessage(tab.id, { type: "toggle-like" }).catch(() => {});
     }
+    if (command.moveQueue) {
+      const tabs = await chrome.tabs.query({ url: "https://music.youtube.com/*" });
+      for (const tab of tabs) chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: moveYouTubeMusicQueue, args: [command.moveQueue.from, command.moveQueue.to] }).catch(() => {});
+    }
   } catch {}
   finally { syncing = false; }
 }
 sync();
+
+function moveYouTubeMusicQueue(from, to) {
+  document.querySelector("#queue")?.dispatch?.({ type: "MOVE_ITEM", payload: { fromIndex: from, toIndex: to } });
+}

@@ -19,10 +19,14 @@ function liked() {
 function queue() {
   const items = [...document.querySelectorAll("ytmusic-player-queue-item")];
   const current = items.findIndex(item => item.hasAttribute("selected") || item.getAttribute("play-button-state") === "playing" || item.querySelector("[icon='pause']"));
-  return (current >= 0 ? items.slice(current + 1) : items).map(item => ({
+  return items.map((item, index) => ({
     title: (item.querySelector("#song-title, .song-title, [slot='title']")?.textContent || "").trim(),
-    artist: (item.querySelector("#byline, .byline, [slot='subtitle']")?.textContent || "").trim()
-  })).filter(item => item.title).slice(0, 8);
+    artist: (item.querySelector("#byline, .byline, [slot='subtitle']")?.textContent || "").trim(),
+    artwork: item.querySelector("img")?.src || "",
+    duration: (item.querySelector(".duration")?.textContent || "").trim(),
+    selected: index === current,
+    index
+  })).filter(item => item.title).slice(Math.max(0, current - 5), current >= 0 ? current + 9 : 14);
 }
 
 function publish() { chrome.runtime.sendMessage({ type: "ytm-state", liked: liked(), queue: queue() }).catch(() => {}); }

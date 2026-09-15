@@ -3,13 +3,16 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 namespace GlassShell;
 
 internal sealed class PanelWindow : ShellWindow
 {
-    readonly ShellController owner; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation; double panelHeight = 410;
+    readonly ShellController owner; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation, queueDragFrom = -1; double panelHeight = 410;
     public string CurrentPage => current; public bool IsOpen { get; private set; }
     public int PresentationVersion { get; private set; }
     public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; }
@@ -93,8 +96,8 @@ internal sealed class PanelWindow : ShellWindow
             case "notes":
                 note = new TextBox { Text = Storage.Read("quick-note.txt"), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Height = 248, FontFamily = Ui.Font, FontSize = 15, Foreground = Ui.White, Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)), BorderThickness = new Thickness(0), Padding = new Thickness(12), CaretBrush = Ui.White }; note.TextChanged += (_, _) => SaveNote(); body.Children.Add(note); live = Ui.Text("Saved on this device", 11, Ui.Muted); live.Margin = new Thickness(0, 10, 0, 0); body.Children.Add(live); break;
             case "music":
-                body.Children.Add(new Border { Height = 150 }); musicArtist = Ui.Text("", 13, Ui.Muted); musicTitle = Ui.Text("", 21, weight: FontWeights.SemiBold); musicLabels = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(musicArtist); musicLabels.Children.Add(musicTitle); like = Ui.Icon("heart", "Connect the YouTube Music extension", owner.Media.ToggleLike, 38); like.Margin = new Thickness(0); like.Background = Brushes.Transparent;
-                var track = new Grid(); track.ColumnDefinitions.Add(new ColumnDefinition()); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) }); Grid.SetColumn(musicLabels, 0); Grid.SetColumn(like, 1); track.Children.Add(musicLabels); track.Children.Add(like); body.Children.Add(track); body.Children.Add(new Border { Height = 10 });
+                body.Children.Add(new Border { Height = 136 }); art = new RoundedImage(48, 48, 9); musicArtist = Ui.Text("", 12, Ui.Muted); musicTitle = Ui.Text("", 19, weight: FontWeights.SemiBold); musicLabels = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(musicArtist); musicLabels.Children.Add(musicTitle); like = Ui.Icon("heart", "Connect the YouTube Music extension", owner.Media.ToggleLike, 38); like.Margin = new Thickness(0); like.Background = Brushes.Transparent;
+                var track = new Grid(); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) }); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) }); track.ColumnDefinitions.Add(new ColumnDefinition()); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) }); Grid.SetColumn(art, 0); Grid.SetColumn(musicLabels, 2); Grid.SetColumn(like, 3); track.Children.Add(art); track.Children.Add(musicLabels); track.Children.Add(like); body.Children.Add(track); body.Children.Add(new Border { Height = 10 });
                 seek = new Slider { Minimum = 0, Maximum = 1, Height = 24, IsMoveToPointEnabled = false, Foreground = Ui.Accent }; StyleSeek(seek);
                 // Own pointer capture across the whole rail so handled thumb events
                 // cannot swallow release, and clicks and drags use the same path.
@@ -142,8 +145,8 @@ internal sealed class PanelWindow : ShellWindow
     }
     void AddMediaBackdrop()
     {
-        mediaBackdrop = new Image { Width = Width, Height = panelHeight, Stretch = Stretch.UniformToFill, Opacity = .82, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
-        mediaBackdrop.Clip = new RectangleGeometry(new Rect(0, 0, Width, panelHeight), 25, 25); Glass.Content.Children.Add(mediaBackdrop);
+        mediaBackdrop = new Image { Width = Width * 1.18, Height = panelHeight * 1.18, Stretch = Stretch.UniformToFill, Opacity = .92, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Effect = new BlurEffect { Radius = 34, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality } };
+        Glass.Content.Children.Add(mediaBackdrop);
         var gradient = new LinearGradientBrush(); gradient.StartPoint = new Point(.5, 0); gradient.EndPoint = new Point(.5, 1); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(118, 5, 8, 12), 0)); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(95, 5, 8, 12), .38)); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(225, 4, 6, 9), 1));
         Glass.Content.Children.Add(new Border { Width = Width, Height = panelHeight, Background = gradient, CornerRadius = new CornerRadius(25) });
     }
@@ -210,17 +213,33 @@ internal sealed class PanelWindow : ShellWindow
     static string ConnectedBluetoothLabel(ConnectivityService c) => c.BluetoothDevices.FirstOrDefault(x => x.Connected)?.Name ?? (c.BluetoothBusy ? "Refreshing…" : "On");
     void PopulateQueue()
     {
-        if (queueList == null) return; string signature = string.Join("\n", owner.Media.Queue.Select(x => x.title + "\0" + x.artist)); if (signature == queueSignature) return; queueSignature = signature; queueList.Children.Clear();
+        if (queueList == null) return; string signature = string.Join("\n", owner.Media.Queue.Select(x => $"{x.index}\0{x.title}\0{x.artist}\0{x.artwork}\0{x.duration}\0{x.selected}")); if (signature == queueSignature) return; queueSignature = signature; queueList.Children.Clear();
         if (owner.Media.Queue.Count == 0)
         {
             string message = owner.Media.LikeConnected ? "Nothing else is queued." : "Reload the GlassShell YouTube Music extension to show your queue."; queueList.Children.Add(Message(message)); return;
         }
-        int index = 1; foreach (var item in owner.Media.Queue)
+        int selectedPosition = owner.Media.Queue.ToList().FindIndex(x => x.selected); int position = 0; foreach (var item in owner.Media.Queue)
         {
-            var number = Ui.Text((index++).ToString(), 12, Ui.Muted); number.Width = 28; number.TextAlignment = TextAlignment.Center;
-            var labels = new StackPanel(); labels.Children.Add(Ui.Text(item.title, 14, weight: FontWeights.SemiBold)); labels.Children.Add(Ui.Text(item.artist, 11, Ui.Muted));
-            var row = Ui.Row(number, labels); row.VerticalAlignment = VerticalAlignment.Center; var surface = new Border { Child = row, Padding = new Thickness(7, 8, 7, 8), Margin = new Thickness(0, 0, 0, 3), CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)) }; queueList.Children.Add(surface);
+            bool past = selectedPosition >= 0 && position < selectedPosition; var artwork = new RoundedImage(42, 42, 8) { Source = QueueArtwork(item.artwork), Background = new SolidColorBrush(Color.FromArgb(24, 255, 255, 255)) };
+            var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; labels.Children.Add(Ui.Text(item.title, 13, weight: item.selected ? FontWeights.SemiBold : FontWeights.Normal)); labels.Children.Add(Ui.Text(item.artist, 11, Ui.Muted));
+            var duration = Ui.Text(item.duration, 11, Ui.Muted); duration.HorizontalAlignment = HorizontalAlignment.Right;
+            var grip = MediaIcon("grip-vertical", "Drag to reorder", () => { }, 30); grip.Cursor = Cursors.SizeNS;
+            var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) }); Grid.SetColumn(artwork, 0); Grid.SetColumn(labels, 2); Grid.SetColumn(duration, 3); Grid.SetColumn(grip, 4); row.Children.Add(artwork); row.Children.Add(labels); row.Children.Add(duration); row.Children.Add(grip);
+            var surface = new Border { Child = row, Padding = new Thickness(3, 5, 0, 5), Margin = new Thickness(0, 0, 0, 2), CornerRadius = new CornerRadius(10), Opacity = past ? .46 : 1, Tag = item };
+            var hoverStyle = new Style(typeof(Border)); hoverStyle.Setters.Add(new Setter(Border.BackgroundProperty, item.selected ? Ui.WindowsAccentSurface : Brushes.Transparent)); var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true }; hover.Setters.Add(new Setter(Border.BackgroundProperty, item.selected ? Ui.WindowsAccentSurface : new SolidColorBrush(Color.FromArgb(24, 255, 255, 255)))); hoverStyle.Triggers.Add(hover); surface.Style = hoverStyle;
+            grip.PreviewMouseLeftButtonDown += (_, e) => { queueDragFrom = item.index; surface.Opacity = .65; grip.CaptureMouse(); e.Handled = true; };
+            grip.PreviewMouseLeftButtonUp += (_, e) => { int from = queueDragFrom; var point = e.GetPosition(queueList); int target = QueueTargetAt(point.Y); grip.ReleaseMouseCapture(); surface.Opacity = past ? .46 : 1; if (target >= 0) owner.Media.MoveQueue(from, target); queueDragFrom = -1; e.Handled = true; };
+            grip.LostMouseCapture += (_, _) => { surface.Opacity = past ? .46 : 1; queueDragFrom = -1; };
+            queueList.Children.Add(surface); position++;
         }
+    }
+    int QueueTargetAt(double y)
+    {
+        if (queueList == null) return -1; foreach (UIElement child in queueList.Children) if (child is Border row && row.Tag is QueueTrack item) { var top = row.TranslatePoint(new Point(0, 0), queueList).Y; if (y >= top && y <= top + row.ActualHeight) return item.index; } return -1;
+    }
+    static ImageSource? QueueArtwork(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null; try { var image = new BitmapImage(); image.BeginInit(); image.UriSource = uri; image.DecodePixelWidth = 96; image.CreateOptions = BitmapCreateOptions.DelayCreation; image.EndInit(); return image; } catch { return null; }
     }
     void UpdateSeek(double x) { if (seek != null) seek.Value = Math.Clamp((x - 6) / Math.Max(1, seek.ActualWidth - 12), 0, 1); }
     static void StyleSeek(Slider slider)
@@ -246,11 +265,13 @@ internal sealed class PanelWindow : ShellWindow
         if (targetTrack == m.TrackRevision) { if (displayedTrack == targetTrack) SetMediaArtwork(m.AlbumArt); return; }
         targetTrack = m.TrackRevision; int token = ++trackAnimation; double direction = m.TrackDirection < 0 ? 1 : -1;
         if (mediaBackdrop != null) AnimatePart(mediaBackdrop, 0, direction * 16, 0, 145);
+        if (art != null) AnimatePart(art, 0, direction * 22, 0, 135);
         AnimatePart(musicLabels, 0, direction * 26, 36, 140, false, () =>
         {
             if (token != trackAnimation || musicLabels == null) return;
             musicTitle.Text = m.Title; musicArtist.Text = m.Artist; SetMediaArtwork(m.AlbumArt);
             if (mediaBackdrop != null) AnimatePart(mediaBackdrop, -direction * 16, 0, 0, 190, true);
+            if (art != null) AnimatePart(art, -direction * 22, 0, 0, 175, true);
             AnimatePart(musicLabels, -direction * 26, 0, 42, 195, true, () => { if (token == trackAnimation) displayedTrack = targetTrack; });
         });
     }
