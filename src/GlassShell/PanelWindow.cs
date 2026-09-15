@@ -9,7 +9,7 @@ namespace GlassShell;
 
 internal sealed class PanelWindow : ShellWindow
 {
-    readonly ShellController owner; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art, queueArt; StackPanel? musicLabels, connectivityBody, queueList; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation; double panelHeight = 410;
+    readonly ShellController owner; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation; double panelHeight = 410;
     public string CurrentPage => current; public bool IsOpen { get; private set; }
     public int PresentationVersion { get; private set; }
     public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; }
@@ -49,7 +49,7 @@ internal sealed class PanelWindow : ShellWindow
         if (!IsOpen) { Open(page); return; }
         if (!SaveNote()) return;
         current = page; PresentationVersion++; Build(); PositionSurface(); UpdateLayout(); Tick();
-        if (Glass.Content.Children.Count > 0 && Glass.Content.Children[0] is FrameworkElement content)
+        if (Glass.Content.Children.Count > 0 && Glass.Content.Children[^1] is FrameworkElement content)
         {
             var move = new TranslateTransform(12, 0); content.RenderTransform = move; content.Opacity = 0;
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
@@ -66,12 +66,17 @@ internal sealed class PanelWindow : ShellWindow
     void Build()
     {
         var trayIcons = current == "tray" ? owner.Tray.Icons : Array.Empty<TrayIconItem>();
-        panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 385, "queue" => 480, "notifications" => 260, "controls" or "wifi" or "bluetooth" => 400, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; queueSignature = ""; note = null; live = elapsed = total = musicTitle = musicArtist = radioState = queueTitle = queueArtist = null; radioToggle = null; timerProgress = null; addMinute = null; seek = null; art = queueArt = null; musicLabels = connectivityBody = queueList = null; play = pause = prev = next = like = queuePlay = null; dragging = false;
-        var body = new StackPanel { Margin = new Thickness(24) }; var header = new Grid();
-        if (current is "wifi" or "bluetooth" or "queue") { string parent = current == "queue" ? "music" : "controls"; var back = Ui.Icon("arrow-left", "Back", () => Navigate(parent), 34); back.HorizontalAlignment = HorizontalAlignment.Left; back.Margin = new Thickness(-3, -3, 0, -3); header.Children.Add(back); }
-        var heading = Ui.Text(current switch { "music" => "Now playing", "queue" => "Queue", "active-timer" => "Active Timer", "timer" => "Timer", "notes" => "Notes", "widgets" => "Widgets", "controls" => "Control Center", "wifi" => "Wi‑Fi", "bluetooth" => "Bluetooth", "notifications" => "Notifications", "tray" => "Background apps", _ => "GlassShell" }, 22, weight: FontWeights.SemiBold); if (current is "wifi" or "bluetooth" or "queue") heading.Margin = new Thickness(44, 0, 0, 0); header.Children.Add(heading); var close = Ui.Icon("x", "Close", Dismiss, 30); close.HorizontalAlignment = HorizontalAlignment.Right; Panel.SetZIndex(close, 10); header.Children.Add(close);
+        bool mediaPage = current is "music" or "queue"; Width = mediaPage ? 350 : 420; panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 400, "queue" => 440, "notifications" => 260, "controls" or "wifi" or "bluetooth" => 400, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; queueSignature = ""; note = null; live = elapsed = total = musicTitle = musicArtist = radioState = queueTitle = queueArtist = null; radioToggle = null; timerProgress = null; addMinute = null; seek = null; art = null; mediaBackdrop = null; musicLabels = connectivityBody = queueList = null; play = pause = prev = next = like = queuePlay = null; dragging = false;
+        if (mediaPage) AddMediaBackdrop();
+        var body = new StackPanel { Margin = mediaPage ? new Thickness(18) : new Thickness(24) }; var header = new Grid();
+        if (mediaPage) BuildMediaHeader(header);
+        else
+        {
+        if (current is "wifi" or "bluetooth") { var back = Ui.Icon("arrow-left", "Back", () => Navigate("controls"), 34); back.HorizontalAlignment = HorizontalAlignment.Left; back.Margin = new Thickness(-3, -3, 0, -3); header.Children.Add(back); }
+        var heading = Ui.Text(current switch { "active-timer" => "Active Timer", "timer" => "Timer", "notes" => "Notes", "widgets" => "Widgets", "controls" => "Control Center", "wifi" => "Wi‑Fi", "bluetooth" => "Bluetooth", "notifications" => "Notifications", "tray" => "Background apps", _ => "GlassShell" }, 22, weight: FontWeights.SemiBold); if (current is "wifi" or "bluetooth") heading.Margin = new Thickness(44, 0, 0, 0); header.Children.Add(heading); var close = Ui.Icon("x", "Close", Dismiss, 30); close.HorizontalAlignment = HorizontalAlignment.Right; Panel.SetZIndex(close, 10); header.Children.Add(close);
+        }
         if (current is "wifi" or "bluetooth") { bool wifi = current == "wifi"; radioState = Ui.Text("", 12, Ui.Muted); radioToggle = Ui.Toggle(false, () => _ = owner.Connectivity.ToggleRadio(wifi ? Windows.Devices.Radios.RadioKind.WiFi : Windows.Devices.Radios.RadioKind.Bluetooth)); var state = Ui.Row(radioState, radioToggle); radioState.Margin = new Thickness(0, 0, 8, 0); state.HorizontalAlignment = HorizontalAlignment.Right; state.Margin = new Thickness(0, 0, 40, 0); header.Children.Add(state); UpdateRadioHeader(); }
-        body.Children.Add(header); body.Children.Add(new Border { Height = 18 });
+        body.Children.Add(header); body.Children.Add(new Border { Height = mediaPage ? 12 : 18 });
         switch (current)
         {
             case "active-timer":
@@ -88,8 +93,8 @@ internal sealed class PanelWindow : ShellWindow
             case "notes":
                 note = new TextBox { Text = Storage.Read("quick-note.txt"), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Height = 248, FontFamily = Ui.Font, FontSize = 15, Foreground = Ui.White, Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)), BorderThickness = new Thickness(0), Padding = new Thickness(12), CaretBrush = Ui.White }; note.TextChanged += (_, _) => SaveNote(); body.Children.Add(note); live = Ui.Text("Saved on this device", 11, Ui.Muted); live.Margin = new Thickness(0, 10, 0, 0); body.Children.Add(live); break;
             case "music":
-                art = new RoundedImage(72, 72, 12); musicTitle = Ui.Text("", 18, weight: FontWeights.SemiBold); musicArtist = Ui.Text("", 13, Ui.Muted); musicLabels = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(musicTitle); musicLabels.Children.Add(musicArtist); like = Ui.Icon("heart", "Connect the YouTube Music extension", owner.Media.ToggleLike, 40); like.Margin = new Thickness(0); like.Background = Brushes.Transparent;
-                var track = new Grid(); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) }); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) }); track.ColumnDefinitions.Add(new ColumnDefinition()); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) }); Grid.SetColumn(art, 0); Grid.SetColumn(musicLabels, 2); Grid.SetColumn(like, 3); track.Children.Add(art); track.Children.Add(musicLabels); track.Children.Add(like); body.Children.Add(track); body.Children.Add(new Border { Height = 24 });
+                body.Children.Add(new Border { Height = 150 }); musicArtist = Ui.Text("", 13, Ui.Muted); musicTitle = Ui.Text("", 21, weight: FontWeights.SemiBold); musicLabels = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(musicArtist); musicLabels.Children.Add(musicTitle); like = Ui.Icon("heart", "Connect the YouTube Music extension", owner.Media.ToggleLike, 38); like.Margin = new Thickness(0); like.Background = Brushes.Transparent;
+                var track = new Grid(); track.ColumnDefinitions.Add(new ColumnDefinition()); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) }); Grid.SetColumn(musicLabels, 0); Grid.SetColumn(like, 1); track.Children.Add(musicLabels); track.Children.Add(like); body.Children.Add(track); body.Children.Add(new Border { Height = 10 });
                 seek = new Slider { Minimum = 0, Maximum = 1, Height = 24, IsMoveToPointEnabled = false, Foreground = Ui.Accent }; StyleSeek(seek);
                 // Own pointer capture across the whole rail so handled thumb events
                 // cannot swallow release, and clicks and drags use the same path.
@@ -99,11 +104,10 @@ internal sealed class PanelWindow : ShellWindow
                 seek.LostMouseCapture += (_, _) => dragging = false;
                 body.Children.Add(seek);
                 elapsed = Ui.Text("", 11, Ui.Muted); total = Ui.Text("", 11, Ui.Muted); var times = new Grid(); times.Children.Add(elapsed); total.HorizontalAlignment = HorizontalAlignment.Right; times.Children.Add(total); body.Children.Add(times);
-                prev = Ui.Icon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 46); play = Ui.Icon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 52); next = Ui.Icon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 46); var transport = Ui.Row(prev, play, next); transport.HorizontalAlignment = HorizontalAlignment.Center; transport.Margin = new Thickness(0, 14, 0, 8); body.Children.Add(transport); body.Children.Add(Ui.ActionButton("list-details", "Queue", () => Navigate("queue"), 350, 40)); break;
+                prev = MediaIcon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 46); play = Ui.Button("", () => _ = owner.Media.Control("toggle"), 128, 48); play.Margin = new Thickness(15, 8, 15, 0); play.Background = new SolidColorBrush(Color.FromArgb(64, 255, 255, 255)); next = MediaIcon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 46); var transport = Ui.Row(prev, play, next); transport.HorizontalAlignment = HorizontalAlignment.Center; body.Children.Add(transport); break;
             case "queue":
-                queueArt = new RoundedImage(48, 48, 8); queueTitle = Ui.Text("", 14, weight: FontWeights.SemiBold); queueArtist = Ui.Text("", 11, Ui.Muted); var queueLabels = new StackPanel { Width = 142, Margin = new Thickness(10, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center }; queueLabels.Children.Add(queueTitle); queueLabels.Children.Add(queueArtist);
-                var queuePrev = Ui.Icon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 38); queuePlay = Ui.Icon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 42); var queueNext = Ui.Icon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 38); var mini = Ui.Row(queueArt, queueLabels, queuePrev, queuePlay, queueNext); mini.VerticalAlignment = VerticalAlignment.Center; body.Children.Add(Card(mini, new Thickness(12)));
-                var upNext = Ui.Text("Up next", 13, Ui.Muted, FontWeights.SemiBold); upNext.Margin = new Thickness(2, 10, 0, 10); body.Children.Add(upNext); queueList = new StackPanel(); body.Children.Add(new ScrollViewer { Content = queueList, Height = 280, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly }); PopulateQueue(); break;
+                queueArtist = Ui.Text("", 13, Ui.Muted); queueTitle = Ui.Text("", 19, weight: FontWeights.SemiBold); var queueLabels = new StackPanel { Width = 170 }; queueLabels.Children.Add(queueArtist); queueLabels.Children.Add(queueTitle); var queuePrev = MediaIcon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 34); queuePlay = MediaIcon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 36); var queueNext = MediaIcon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 34); var mini = new Grid(); mini.ColumnDefinitions.Add(new ColumnDefinition()); mini.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); mini.Children.Add(queueLabels); var miniControls = Ui.Row(queuePrev, queuePlay, queueNext); Grid.SetColumn(miniControls, 1); mini.Children.Add(miniControls); body.Children.Add(mini);
+                body.Children.Add(new Border { Height = 76 }); var upNext = Ui.Text("Up next", 16, Ui.White, FontWeights.SemiBold); upNext.Margin = new Thickness(2, 0, 0, 10); body.Children.Add(upNext); queueList = new StackPanel(); body.Children.Add(new ScrollViewer { Content = queueList, Height = 235, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly }); PopulateQueue(); break;
             case "widgets": body.Children.Add(Ui.Text("Your widgets will live here.", 14, Ui.Muted)); break;
             case "controls":
             case "wifi":
@@ -136,6 +140,19 @@ internal sealed class PanelWindow : ShellWindow
         }
         Glass.Content.Children.Add(body);
     }
+    void AddMediaBackdrop()
+    {
+        mediaBackdrop = new Image { Width = Width, Height = panelHeight, Stretch = Stretch.UniformToFill, Opacity = .82, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
+        mediaBackdrop.Clip = new RectangleGeometry(new Rect(0, 0, Width, panelHeight), 25, 25); Glass.Content.Children.Add(mediaBackdrop);
+        var gradient = new LinearGradientBrush(); gradient.StartPoint = new Point(.5, 0); gradient.EndPoint = new Point(.5, 1); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(118, 5, 8, 12), 0)); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(95, 5, 8, 12), .38)); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(225, 4, 6, 9), 1));
+        Glass.Content.Children.Add(new Border { Width = Width, Height = panelHeight, Background = gradient, CornerRadius = new CornerRadius(25) });
+    }
+    void BuildMediaHeader(Grid header)
+    {
+        var label = Ui.Text("Now Playing", 11, new SolidColorBrush(Color.FromArgb(205, 255, 255, 255)), FontWeights.SemiBold); header.Children.Add(label);
+        var playerTab = Ui.Button("Player", () => { if (current != "music") Navigate("music"); }, 52, 28); var queueTab = Ui.Button("Queue", () => { if (current != "queue") Navigate("queue"); }, 50, 28); playerTab.Margin = queueTab.Margin = new Thickness(2, 0, 2, 0); playerTab.Background = current == "music" ? new SolidColorBrush(Color.FromArgb(56, 255, 255, 255)) : Brushes.Transparent; queueTab.Background = current == "queue" ? new SolidColorBrush(Color.FromArgb(56, 255, 255, 255)) : Brushes.Transparent; var tabs = Ui.Row(playerTab, queueTab); tabs.HorizontalAlignment = HorizontalAlignment.Right; header.Children.Add(tabs);
+    }
+    static Button MediaIcon(string icon, string tip, Action action, double size) { var button = Ui.Icon(icon, tip, action, size); button.Background = Brushes.Transparent; return button; }
     void PopulateConnectivity()
     {
         if (connectivityBody == null) return; connectivityBody.Children.Clear(); var c = owner.Connectivity;
@@ -202,7 +219,7 @@ internal sealed class PanelWindow : ShellWindow
         {
             var number = Ui.Text((index++).ToString(), 12, Ui.Muted); number.Width = 28; number.TextAlignment = TextAlignment.Center;
             var labels = new StackPanel(); labels.Children.Add(Ui.Text(item.title, 14, weight: FontWeights.SemiBold)); labels.Children.Add(Ui.Text(item.artist, 11, Ui.Muted));
-            var row = Ui.Row(number, labels); row.VerticalAlignment = VerticalAlignment.Center; queueList.Children.Add(Card(row, new Thickness(10)));
+            var row = Ui.Row(number, labels); row.VerticalAlignment = VerticalAlignment.Center; var surface = new Border { Child = row, Padding = new Thickness(7, 8, 7, 8), Margin = new Thickness(0, 0, 0, 3), CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)) }; queueList.Children.Add(surface);
         }
     }
     void UpdateSeek(double x) { if (seek != null) seek.Value = Math.Clamp((x - 6) / Math.Max(1, seek.ActualWidth - 12), 0, 1); }
@@ -220,22 +237,24 @@ internal sealed class PanelWindow : ShellWindow
  """;
         slider.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(template);
     }
-    public void Tick() { if (!IsOpen) return; if ((current == "timer" || current == "active-timer") && live != null) { if (timerProgress != null) timerProgress.Value = owner.Model.TimerProgress; if (addMinute != null) addMinute.IsEnabled = owner.Model.TimerActive; live.Text = owner.Model.TimerActive ? owner.Model.TimerText : "00:00"; if (pause != null) { if (lastRunning != owner.Model.TimerRunning) { lastRunning = owner.Model.TimerRunning; pause.Content = Ui.Text(owner.Model.TimerRunning ? "Pause" : "Resume"); } pause.IsEnabled = owner.Model.TimerActive && !owner.Model.TimerFinished; } } if (current == "music" && seek != null) { var m = owner.Media; PresentTrack(m); seek.IsEnabled = m.CanSeek && m.Duration > TimeSpan.Zero; seek.ToolTip = seek.IsEnabled ? "Seek" : "This player does not support seeking"; if (!dragging) seek.Value = m.Duration > TimeSpan.Zero ? m.Position.TotalSeconds / m.Duration.TotalSeconds : 0; elapsed!.Text = ShellModel.FormatTime(dragging ? TimeSpan.FromTicks((long)(m.Duration.Ticks * seek.Value)) : m.Position); total!.Text = ShellModel.FormatTime(m.Duration); if (lastPlaying != m.Playing) { lastPlaying = m.Playing; play!.Content = TablerIcon.Create(m.Playing ? "player-pause" : "player-play", 22); } if (lastLiked != m.Liked) { lastLiked = m.Liked; like!.Content = TablerIcon.Create(m.Liked ? "heart-filled" : "heart", 20, m.Liked ? Ui.Danger : Ui.White); } like!.ToolTip = !m.LikeConnected ? "Install the GlassShell YouTube Music extension" : m.Liked ? "Unlike in YouTube Music" : "Like in YouTube Music"; like.IsEnabled = m.Visible && m.LikeConnected; play!.IsEnabled = m.CanToggle; prev!.IsEnabled = m.CanPrevious; next!.IsEnabled = m.CanNext; } if (current == "queue" && queueList != null) { var m = owner.Media; queueTitle!.Text = m.Visible ? m.Title : "Nothing playing"; queueArtist!.Text = m.Artist; queueArt!.Source = m.AlbumArt; queuePlay!.Content = TablerIcon.Create(m.Playing ? "player-pause" : "player-play", 20); queuePlay.IsEnabled = m.CanToggle; PopulateQueue(); } }
+    public void Tick() { if (!IsOpen) return; if ((current == "timer" || current == "active-timer") && live != null) { if (timerProgress != null) timerProgress.Value = owner.Model.TimerProgress; if (addMinute != null) addMinute.IsEnabled = owner.Model.TimerActive; live.Text = owner.Model.TimerActive ? owner.Model.TimerText : "00:00"; if (pause != null) { if (lastRunning != owner.Model.TimerRunning) { lastRunning = owner.Model.TimerRunning; pause.Content = Ui.Text(owner.Model.TimerRunning ? "Pause" : "Resume"); } pause.IsEnabled = owner.Model.TimerActive && !owner.Model.TimerFinished; } } if (current == "music" && seek != null) { var m = owner.Media; PresentTrack(m); seek.IsEnabled = m.CanSeek && m.Duration > TimeSpan.Zero; seek.ToolTip = seek.IsEnabled ? "Seek" : "This player does not support seeking"; if (!dragging) seek.Value = m.Duration > TimeSpan.Zero ? m.Position.TotalSeconds / m.Duration.TotalSeconds : 0; elapsed!.Text = ShellModel.FormatTime(dragging ? TimeSpan.FromTicks((long)(m.Duration.Ticks * seek.Value)) : m.Position); total!.Text = ShellModel.FormatTime(m.Duration); if (lastPlaying != m.Playing) { lastPlaying = m.Playing; play!.Content = PlaybackPill(m.Playing); } if (lastLiked != m.Liked) { lastLiked = m.Liked; like!.Content = TablerIcon.Create(m.Liked ? "heart-filled" : "heart", 20, m.Liked ? Ui.Danger : Ui.White); } like!.ToolTip = !m.LikeConnected ? "Install the GlassShell YouTube Music extension" : m.Liked ? "Unlike in YouTube Music" : "Like in YouTube Music"; like.IsEnabled = m.Visible && m.LikeConnected; play!.IsEnabled = m.CanToggle; prev!.IsEnabled = m.CanPrevious; next!.IsEnabled = m.CanNext; } if (current == "queue" && queueList != null) { var m = owner.Media; queueTitle!.Text = m.Visible ? m.Title : "Nothing playing"; queueArtist!.Text = m.Artist; mediaBackdrop!.Source = m.AlbumArt; queuePlay!.Content = TablerIcon.Create(m.Playing ? "player-pause" : "player-play", 18); queuePlay.IsEnabled = m.CanToggle; PopulateQueue(); } }
+    static StackPanel PlaybackPill(bool playing) { var text = Ui.Text(playing ? "Pause" : "Play", 15, Ui.White, FontWeights.SemiBold); text.Margin = new Thickness(8, 0, 0, 0); return Ui.Row(TablerIcon.Create(playing ? "player-pause" : "player-play", 20), text); }
     void PresentTrack(MediaService m)
     {
-        if (art == null || musicLabels == null || musicTitle == null || musicArtist == null) return;
-        if (displayedTrack < 0) { displayedTrack = targetTrack = m.TrackRevision; musicTitle.Text = m.Visible ? m.Title : "Nothing playing"; musicArtist.Text = m.Artist; art.Source = m.AlbumArt; return; }
-        if (targetTrack == m.TrackRevision) { if (displayedTrack == targetTrack) art.Source = m.AlbumArt; return; }
+        if (musicLabels == null || musicTitle == null || musicArtist == null) return;
+        if (displayedTrack < 0) { displayedTrack = targetTrack = m.TrackRevision; musicTitle.Text = m.Visible ? m.Title : "Nothing playing"; musicArtist.Text = m.Artist; SetMediaArtwork(m.AlbumArt); return; }
+        if (targetTrack == m.TrackRevision) { if (displayedTrack == targetTrack) SetMediaArtwork(m.AlbumArt); return; }
         targetTrack = m.TrackRevision; int token = ++trackAnimation; double direction = m.TrackDirection < 0 ? 1 : -1;
-        AnimatePart(art, 0, direction * 26, 0, 130);
+        if (mediaBackdrop != null) AnimatePart(mediaBackdrop, 0, direction * 16, 0, 145);
         AnimatePart(musicLabels, 0, direction * 26, 36, 140, false, () =>
         {
-            if (token != trackAnimation || art == null || musicLabels == null) return;
-            musicTitle.Text = m.Title; musicArtist.Text = m.Artist; art.Source = m.AlbumArt;
-            AnimatePart(art, -direction * 26, 0, 0, 185, true);
+            if (token != trackAnimation || musicLabels == null) return;
+            musicTitle.Text = m.Title; musicArtist.Text = m.Artist; SetMediaArtwork(m.AlbumArt);
+            if (mediaBackdrop != null) AnimatePart(mediaBackdrop, -direction * 16, 0, 0, 190, true);
             AnimatePart(musicLabels, -direction * 26, 0, 42, 195, true, () => { if (token == trackAnimation) displayedTrack = targetTrack; });
         });
     }
+    void SetMediaArtwork(ImageSource? source) { if (art != null) art.Source = source; if (mediaBackdrop != null) mediaBackdrop.Source = source; }
     static void AnimatePart(FrameworkElement element, double from, double to, int delay, int duration, bool fadeIn = false, Action? completed = null)
     {
         var move = element.RenderTransform as TranslateTransform ?? new TranslateTransform(); element.RenderTransform = move;
