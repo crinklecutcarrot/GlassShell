@@ -42,6 +42,10 @@ if (-not $Restore) {
     Set-ItemProperty -Path $settings -Name 'controlStyles[2].styles[0]' -Value 'Margin=0,4,0,4'
     Set-ItemProperty -Path $settings -Name 'controlStyles[2].styles[1]' -Value 'CornerRadius=12'
     Set-ItemProperty -Path $settings -Name 'controlStyles[2].styles[2]' -Value 'Padding=4'
+    Set-ItemProperty -Path $settings -Name 'controlStyles[3].target' -Value 'Grid#IconPanel@RunningIndicatorStates > Rectangle#RunningIndicator, Taskbar.TaskListLabeledButtonPanel@RunningIndicatorStates > Rectangle#RunningIndicator'
+    Set-ItemProperty -Path $settings -Name 'controlStyles[3].styles[0]' -Value 'Height=2'
+    Set-ItemProperty -Path $settings -Name 'controlStyles[3].styles[1]' -Value 'VerticalAlignment=Bottom'
+    Set-ItemProperty -Path $settings -Name 'controlStyles[3].styles[2]' -Value 'RenderTransform:=<TranslateTransform Y="2" />'
     Set-ItemProperty -Path $mod -Name SettingsChangeTime -Value ([int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
 }
 
