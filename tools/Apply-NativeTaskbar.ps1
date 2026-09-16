@@ -25,6 +25,10 @@ if (-not $Restore) {
     Set-ItemProperty -Path $settings -Name 'controlStyles[1].target' -Value 'StackPanel#SystemTrayFrameGrid, Grid#SystemTrayFrameGrid'
     Set-ItemProperty -Path $settings -Name 'controlStyles[1].styles[0]' -Value 'Background=Transparent'
     Set-ItemProperty -Path $settings -Name 'controlStyles[1].styles[1]' -Value 'BorderThickness=0'
+    Set-ItemProperty -Path $settings -Name 'controlStyles[2].target' -Value 'Taskbar.TaskbarFrame > Grid#RootGrid'
+    Set-ItemProperty -Path $settings -Name 'controlStyles[2].styles[0]' -Value 'Margin=0,0,0,6'
+    Set-ItemProperty -Path $settings -Name 'controlStyles[2].styles[1]' -Value 'CornerRadius=12'
+    Set-ItemProperty -Path $settings -Name 'controlStyles[2].styles[2]' -Value 'Padding=8,0,8,0'
     Set-ItemProperty -Path $mod -Name SettingsChangeTime -Value ([int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
 }
 
