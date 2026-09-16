@@ -44,6 +44,7 @@ internal sealed class UiRegressionTest
             await Task.Delay(560); if (s.Media.Liked) s.Media.ToggleLike(); await Press(detailLike.PointToScreen(new Point(20, 20))); checks["song like toggles"] = s.Media.Liked; checks["liked heart is filled"] = detailLike.Content is Image heart && heart.Source is DrawingImage heartDrawing && ((DrawingGroup)heartDrawing.Drawing).Children.OfType<GeometryDrawing>().Any(d => d.Brush != null && d.Brush != Brushes.Transparent);
             foreach (var child in musicBody.Children) if (child is Slider rail)
             {
+                var previewRail = rail.Template.FindName("PreviewRail", rail) as Border; var hover = rail.PointToScreen(new Point(rail.ActualWidth * .85, 12)); SetCursorPos((int)hover.X, (int)hover.Y); await Task.Delay(100); checks["seek hover previews future position"] = previewRail?.Visibility == Visibility.Visible && Math.Abs(previewRail.Width / rail.ActualWidth - .85) < .04;
                 await Press(rail.PointToScreen(new Point(rail.ActualWidth * .75, 12)));
                 Storage.Log("Click seek=" + s.Media.LastTestSeek + " rail=" + rail.Value + " enabled=" + rail.IsEnabled); checks["click rail seeks"] = s.Media.LastTestSeek is double f && Math.Abs(f - .75) < .03;
                 var start = rail.PointToScreen(new Point(rail.ActualWidth * .75, 12)); SetCursorPos((int)start.X, (int)start.Y); mouse_event(2, 0, 0, 0, UIntPtr.Zero); await Task.Delay(80);

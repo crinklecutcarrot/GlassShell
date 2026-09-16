@@ -13,7 +13,7 @@ namespace GlassShell;
 
 internal sealed class PanelWindow : ShellWindow
 {
-    readonly ShellController owner; readonly DispatcherTimer queueAutoScroll = new() { Interval = TimeSpan.FromMilliseconds(32) }; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; ScrollViewer? queueScroll; Border? queueDragRow; QueueTrack? queueDragTrack; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation, queueDropIndex = -1, queueRenderedCount; double panelHeight = 410, queueDragOpacity; Point queuePointer;
+    readonly ShellController owner; readonly DispatcherTimer queueAutoScroll = new() { Interval = TimeSpan.FromMilliseconds(32) }; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; ScrollViewer? queueScroll; Border? seekPreview, queueDragRow; QueueTrack? queueDragTrack; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation, queueDropIndex = -1, queueRenderedCount; double panelHeight = 410, queueDragOpacity; Point queuePointer;
     public string CurrentPage => current; public bool IsOpen { get; private set; }
     public int PresentationVersion { get; private set; }
     public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; PreviewMouseMove += QueueDragMove; PreviewMouseLeftButtonUp += QueueDragEnd; queueAutoScroll.Tick += (_, _) => AutoScrollQueue(); }
@@ -70,7 +70,7 @@ internal sealed class PanelWindow : ShellWindow
     void Build()
     {
         var trayIcons = current == "tray" ? owner.Tray.Icons : Array.Empty<TrayIconItem>();
-        EndQueueDrag(false); bool mediaPage = current is "music" or "queue"; Width = mediaPage ? 350 : 420; panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 365, "queue" => 440, "notifications" => 260, "controls" or "wifi" or "bluetooth" => 400, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; queueSignature = ""; queueRenderedCount = 0; note = null; live = elapsed = total = musicTitle = musicArtist = radioState = queueTitle = queueArtist = null; radioToggle = null; timerProgress = null; addMinute = null; seek = null; art = null; mediaBackdrop = null; musicLabels = connectivityBody = queueList = null; queueScroll = null; play = pause = prev = next = like = queuePlay = null; dragging = false;
+        EndQueueDrag(false); bool mediaPage = current is "music" or "queue"; Width = mediaPage ? 350 : 420; panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 365, "queue" => 440, "notifications" => 260, "controls" or "wifi" or "bluetooth" => 400, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; queueSignature = ""; queueRenderedCount = 0; note = null; live = elapsed = total = musicTitle = musicArtist = radioState = queueTitle = queueArtist = null; radioToggle = null; timerProgress = null; addMinute = null; seek = null; seekPreview = null; art = null; mediaBackdrop = null; musicLabels = connectivityBody = queueList = null; queueScroll = null; play = pause = prev = next = like = queuePlay = null; dragging = false;
         if (mediaPage) AddMediaBackdrop();
         var body = new StackPanel { Margin = mediaPage ? new Thickness(18) : new Thickness(24) }; var header = new Grid();
         if (mediaPage) BuildMediaHeader(header);
@@ -103,8 +103,10 @@ internal sealed class PanelWindow : ShellWindow
                 // Own pointer capture across the whole rail so handled thumb events
                 // cannot swallow release, and clicks and drags use the same path.
                 seek.AddHandler(UIElement.PreviewMouseLeftButtonDownEvent, new System.Windows.Input.MouseButtonEventHandler((_, e) => { if (!seek.IsEnabled) return; dragging = true; seek.CaptureMouse(); UpdateSeek(e.GetPosition(seek).X); e.Handled = true; }), true);
-                seek.PreviewMouseMove += (_, e) => { if (dragging) { UpdateSeek(e.GetPosition(seek).X); e.Handled = true; } };
-                seek.PreviewMouseLeftButtonUp += (_, e) => { if (!dragging) return; UpdateSeek(e.GetPosition(seek).X); dragging = false; seek.ReleaseMouseCapture(); _ = owner.Media.Seek(seek.Value); e.Handled = true; };
+                seek.Loaded += (_, _) => seekPreview = seek.Template.FindName("PreviewRail", seek) as Border;
+                seek.PreviewMouseMove += (_, e) => { double x = e.GetPosition(seek).X; if (dragging) { HideSeekPreview(); UpdateSeek(x); e.Handled = true; } else UpdateSeekPreview(x); };
+                seek.MouseLeave += (_, _) => HideSeekPreview();
+                seek.PreviewMouseLeftButtonUp += (_, e) => { if (!dragging) return; UpdateSeek(e.GetPosition(seek).X); dragging = false; seek.ReleaseMouseCapture(); HideSeekPreview(); _ = owner.Media.Seek(seek.Value); e.Handled = true; };
                 seek.LostMouseCapture += (_, _) => dragging = false;
                 body.Children.Add(seek);
                 elapsed = Ui.Text("", 11, Ui.Muted); total = Ui.Text("", 11, Ui.Muted); var times = new Grid(); times.Children.Add(elapsed); total.HorizontalAlignment = HorizontalAlignment.Right; times.Children.Add(total); body.Children.Add(times);
@@ -266,16 +268,22 @@ internal sealed class PanelWindow : ShellWindow
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null; try { var image = new BitmapImage(); image.BeginInit(); image.UriSource = uri; image.DecodePixelWidth = 96; image.CacheOption = BitmapCacheOption.OnDemand; image.EndInit(); return image; } catch { return null; }
     }
-    void UpdateSeek(double x) { if (seek != null) seek.Value = Math.Clamp((x - 6) / Math.Max(1, seek.ActualWidth - 12), 0, 1); }
+    void UpdateSeek(double x) { if (seek != null) seek.Value = Math.Clamp(x / Math.Max(1, seek.ActualWidth), 0, 1); }
+    void UpdateSeekPreview(double x)
+    {
+        if (seek == null || seekPreview == null || !seek.IsEnabled) return; double preview = Math.Clamp(x / Math.Max(1, seek.ActualWidth), 0, 1); seekPreview.Visibility = preview > seek.Value ? Visibility.Visible : Visibility.Collapsed; seekPreview.Width = preview * seek.ActualWidth;
+    }
+    void HideSeekPreview() { if (seekPreview != null) seekPreview.Visibility = Visibility.Collapsed; }
     static void StyleSeek(Slider slider)
     {
         const string template = """
- <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" TargetType="Slider">
+ <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" TargetType="Slider">
  <Grid Height="24" Background="Transparent">
- <Border Height="4" CornerRadius="2" Background="#35FFFFFF" VerticalAlignment="Center"/>
+ <Border Height="4" CornerRadius="2" Background="#42FFFFFF" VerticalAlignment="Center"/>
+ <Border x:Name="PreviewRail" Height="4" Width="0" CornerRadius="2" Background="#72FFFFFF" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed"/>
  <Track x:Name="PART_Track" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" Value="{TemplateBinding Value}" IsDirectionReversed="False">
- <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Height="4" CornerRadius="2" Background="#98D3FF" VerticalAlignment="Center"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton>
- <Track.Thumb><Thumb Width="12" Height="12"><Thumb.Template><ControlTemplate TargetType="Thumb"><Ellipse Fill="#F8F9FD"/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+ <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Height="4" CornerRadius="2" Background="#F7F8FA" VerticalAlignment="Center"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton>
+ <Track.Thumb><Thumb Width="0" Height="0" Focusable="False"/></Track.Thumb>
  <Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton>
  </Track></Grid></ControlTemplate>
  """;
