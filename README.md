@@ -26,7 +26,7 @@ The setup script downloads the pinned .NET SDK and Zig compiler from their offic
 
 ## Native taskbar
 
-The Windows taskbar remains available during tray-manager validation. A proposed Windhawk DockLike configuration is in `config/`; no Explorer styling has been installed or applied. See `config/README.md` for details and sources.
+The native Windows taskbar remains responsible for pinned apps, running apps, jump lists, previews, and drag behavior. Windhawk's Windows 11 Taskbar Styler applies its DockLike theme so the taskbar hugs those application buttons, while custom styles hide and disable Explorer's right-side tray controls and clock. Run `tools/Apply-NativeTaskbar.ps1` as administrator to reapply it, or add `-Restore` to restore the settings backup.
 
 ## YouTube Music likes
 
