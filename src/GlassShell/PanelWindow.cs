@@ -148,8 +148,7 @@ internal sealed class PanelWindow : ShellWindow
     {
         mediaBackdrop = new Image { Width = Width, Height = panelHeight, Stretch = Stretch.UniformToFill, Opacity = .92, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new Point(.5, .5), RenderTransform = new ScaleTransform(1.18, 1.18), Effect = new BlurEffect { Radius = 34, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality } };
         Glass.Content.Children.Add(mediaBackdrop);
-        var gradient = new LinearGradientBrush(); gradient.StartPoint = new Point(.5, 0); gradient.EndPoint = new Point(.5, 1); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(118, 5, 8, 12), 0)); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(95, 5, 8, 12), .38)); gradient.GradientStops.Add(new GradientStop(Color.FromArgb(225, 4, 6, 9), 1));
-        Glass.Content.Children.Add(new Border { Width = Width, Height = panelHeight, Background = gradient, CornerRadius = new CornerRadius(25) });
+        Glass.Content.Children.Add(new Border { Width = Width, Height = panelHeight, Background = new SolidColorBrush(Color.FromArgb(172, 4, 6, 9)), CornerRadius = new CornerRadius(25) });
     }
     void BuildMediaHeader(Grid header)
     {
