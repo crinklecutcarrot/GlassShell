@@ -4,6 +4,11 @@ $ErrorActionPreference = 'Stop'
 $mod = 'HKLM:\SOFTWARE\Windhawk\Engine\Mods\windows-11-taskbar-styler'
 $settings = Join-Path $mod 'Settings'
 if (-not (Test-Path $settings)) { throw 'Windows 11 Taskbar Styler is not installed.' }
+$heightMod = 'HKLM:\SOFTWARE\Windhawk\Engine\Mods\taskbar-icon-size'
+$heightSettings = Join-Path $heightMod 'Settings'
+if (-not $Restore -and -not (Test-Path $heightSettings)) {
+    throw 'Windhawk mod "Taskbar height and icon size" is required. Install mod ID taskbar-icon-size first.'
+}
 
 $backupFolder = Join-Path $env:LOCALAPPDATA 'GlassShell'
 New-Item -ItemType Directory -Path $backupFolder -Force | Out-Null
@@ -16,6 +21,14 @@ if ($Restore) {
 }
 
 if (-not $Restore) {
+    Set-ItemProperty -Path $heightMod -Name Disabled -Value 0
+    Set-ItemProperty -Path $heightSettings -Name TaskbarHeight -Value 56
+    Set-ItemProperty -Path $heightSettings -Name IconSize -Value 24
+    Set-ItemProperty -Path $heightSettings -Name TaskbarButtonWidth -Value 44
+    Set-ItemProperty -Path $heightSettings -Name IconSizeSmall -Value 16
+    Set-ItemProperty -Path $heightSettings -Name TaskbarButtonWidthSmall -Value 32
+    Set-ItemProperty -Path $heightMod -Name SettingsChangeTime -Value ([int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+
     Set-ItemProperty -Path $mod -Name Disabled -Value 0
     Set-ItemProperty -Path $settings -Name theme -Value 'DockLike'
     Set-ItemProperty -Path $settings -Name xamlDiagnosticsHandling -Value 'allow'
