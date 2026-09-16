@@ -22,7 +22,9 @@ internal sealed class StatusBar : ShellWindow
         owner = controller; Glass.TintAmount = .48; Glass.BottomBorderOnly = true;
         var left = Ui.Row(Link("layout-grid", "Widgets", "widgets"), Link("stopwatch", "Timer", "timer"), Link("pencil", "Notes", "notes")); left.HorizontalAlignment = HorizontalAlignment.Left; left.VerticalAlignment = VerticalAlignment.Center; left.Margin = new Thickness(10, 0, 0, 0); Glass.Content.Children.Add(left);
         var nativeTray = Ui.Icon("apps", "Windows tray", owner.Tray.ShowNativeOverflow, 28);
-        var right = Ui.Row(nativeTray, Link("adjustments-horizontal", "Control Center", "controls"), Link("bell", "Notifications", "notifications"), clock, Link("dots", "Session", "session")); right.HorizontalAlignment = HorizontalAlignment.Right; right.VerticalAlignment = VerticalAlignment.Center; right.Margin = new Thickness(0, 0, 10, 0); clock.Margin = new Thickness(12, 0, 6, 0); Glass.Content.Children.Add(right);
+        var nativeControls = Ui.Icon("adjustments-horizontal", "Windows quick settings", () => OpenWindowsFlyout(0x41), 28);
+        var nativeNotifications = Ui.Icon("bell", "Windows notifications", () => OpenWindowsFlyout(0x4E), 28);
+        var right = Ui.Row(nativeTray, nativeControls, nativeNotifications, clock, Link("dots", "Session", "session")); right.HorizontalAlignment = HorizontalAlignment.Right; right.VerticalAlignment = VerticalAlignment.Center; right.Margin = new Thickness(0, 0, 10, 0); clock.Margin = new Thickness(12, 0, 6, 0); Glass.Content.Children.Add(right);
         musicLabels = new StackPanel { Width = 185, VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(title); musicLabels.Children.Add(artist);
         previous = Ui.Icon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 28); play = Ui.Icon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 28); next = Ui.Icon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 28);
         music = Ui.Button("", () => owner.OpenPanel("music"), 342, 46); music.Margin = new Thickness(0); music.Padding = new Thickness(8); music.ClipToBounds = true; music.Tag = "music"; anchors["music"] = music; music.Content = Ui.Row(art, musicLabels, previous, play, next);
@@ -37,6 +39,7 @@ internal sealed class StatusBar : ShellWindow
         var center = Ui.Row(music, divider, timerButton); center.HorizontalAlignment = HorizontalAlignment.Center; center.VerticalAlignment = VerticalAlignment.Center; Glass.Content.Children.Add(center);
         SourceInitialized += (_, _) => Register(); Closed += (_, _) => Unregister(); Tick();
     }
+    void OpenWindowsFlyout(byte key) { owner.Panel.HideImmediately(); Native.Shortcut(key); }
     Button Link(string icon, string tip, string page) { var b = Ui.Icon(icon, tip, () => owner.OpenPanel(page), 28); b.Tag = page; anchors[page] = b; return b; }
     public double AnchorCenter(string page) { if (anchors.TryGetValue(page, out var b) && b.IsVisible) return b.PointToScreen(new Point(b.ActualWidth / 2, 0)).X / Scale; return Left + Width / 2; }
     public void Tick()

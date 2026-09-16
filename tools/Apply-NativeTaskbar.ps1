@@ -24,7 +24,7 @@ if (-not $Restore) {
     Set-ItemProperty -Path $heightMod -Name Disabled -Value 0
     Set-ItemProperty -Path $heightSettings -Name TaskbarHeight -Value 56
     Set-ItemProperty -Path $heightSettings -Name IconSize -Value 24
-    Set-ItemProperty -Path $heightSettings -Name TaskbarButtonWidth -Value 44
+    Set-ItemProperty -Path $heightSettings -Name TaskbarButtonWidth -Value 40
     Set-ItemProperty -Path $heightSettings -Name IconSizeSmall -Value 16
     Set-ItemProperty -Path $heightSettings -Name TaskbarButtonWidthSmall -Value 32
     Set-ItemProperty -Path $heightMod -Name SettingsChangeTime -Value ([int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
