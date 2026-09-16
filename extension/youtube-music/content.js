@@ -29,11 +29,33 @@ function queue() {
   })).filter(item => item.title).slice(Math.max(0, current - 5));
 }
 
-function publish() { chrome.runtime.sendMessage({ type: "ytm-state", liked: liked(), queue: queue() }).catch(() => {}); }
+let active = true;
+let publishTimer;
+let observer;
+
+function stop() {
+  if (!active) return;
+  active = false;
+  observer?.disconnect();
+  if (publishTimer) clearInterval(publishTimer);
+}
+
+function publish() {
+  if (!active) return;
+  try {
+    const pending = chrome.runtime.sendMessage({ type: "ytm-state", liked: liked(), queue: queue() });
+    pending?.catch(error => {
+      if (String(error).includes("Extension context invalidated")) stop();
+    });
+  } catch (error) {
+    if (String(error).includes("Extension context invalidated")) stop();
+  }
+}
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type !== "toggle-like") return;
   const button = likeButton(); if (button) { button.click(); setTimeout(publish, 300); }
 });
-new MutationObserver(publish).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["aria-pressed", "like-status", "title", "aria-label"] });
-setInterval(publish, 1000);
+observer = new MutationObserver(publish);
+observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["aria-pressed", "like-status", "title", "aria-label"] });
+publishTimer = setInterval(publish, 1000);
 publish();
