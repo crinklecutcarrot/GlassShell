@@ -32,34 +32,25 @@ function queue() {
 let active = true;
 let publishTimer;
 let observer;
+let port;
 
 function stop() {
   if (!active) return;
   active = false;
   observer?.disconnect();
   if (publishTimer) clearInterval(publishTimer);
+  port = undefined;
 }
 
 function publish() {
-  if (!active) return;
+  if (!active || !port) return;
   try {
-    // Chrome leaves the old isolated world alive briefly when an unpacked
-    // extension is reloaded. Do not call any runtime API from that world.
-    if (!chrome?.runtime?.id) { stop(); return; }
-    const pending = chrome.runtime.sendMessage({ type: "ytm-state", liked: liked(), queue: queue() });
-    pending?.catch(error => {
-      if (String(error).includes("Extension context invalidated")) stop();
-    });
-  } catch (error) {
-    if (String(error).includes("Extension context invalidated")) stop();
-  }
+    port.postMessage({ type: "ytm-state", liked: liked(), queue: queue() });
+  } catch { stop(); }
 }
 try {
-  if (!chrome?.runtime?.id) stop();
-  else chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type !== "toggle-like") return;
-    const button = likeButton(); if (button) { button.click(); setTimeout(publish, 300); }
-  });
+  port = chrome.runtime.connect({ name: "ytm-bridge" });
+  port.onDisconnect.addListener(stop);
 } catch { stop(); }
 observer = new MutationObserver(publish);
 if (active) {

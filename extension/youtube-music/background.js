@@ -3,18 +3,21 @@ const headers = { "X-GlassShell-Key": "glass-shell-ytm-v1" };
 let latest = { liked: false, queue: [] };
 let syncing = false;
 
-chrome.runtime.onMessage.addListener((message, sender) => {
-  if (message?.type !== "ytm-state") return;
-  (async () => {
-    let queue = Array.isArray(message.queue) ? message.queue : [];
-    if (sender.tab?.id) {
-      try {
-        const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: sender.tab.id }, world: "MAIN", func: readYouTubeMusicQueue });
-        if (Array.isArray(result)) queue = result;
-      } catch {}
-    }
-    latest = { liked: !!message.liked, queue }; sync();
-  })();
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name !== "ytm-bridge") return;
+  port.onMessage.addListener((message) => {
+    if (message?.type !== "ytm-state") return;
+    (async () => {
+      let queue = Array.isArray(message.queue) ? message.queue : [];
+      if (port.sender?.tab?.id) {
+        try {
+          const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: port.sender.tab.id }, world: "MAIN", func: readYouTubeMusicQueue });
+          if (Array.isArray(result)) queue = result;
+        } catch {}
+      }
+      latest = { liked: !!message.liked, queue }; sync();
+    })();
+  });
 });
 
 function readYouTubeMusicQueue() {
@@ -41,7 +44,7 @@ async function sync() {
     const command = await fetch(`${endpoint}/command`, { headers }).then(r => r.json());
     if (command.toggleLike) {
       const tabs = await chrome.tabs.query({ url: "https://music.youtube.com/*" });
-      for (const tab of tabs) chrome.tabs.sendMessage(tab.id, { type: "toggle-like" }).catch(() => {});
+      for (const tab of tabs) chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: toggleYouTubeMusicLike }).catch(() => {});
     }
     if (command.moveQueue) {
       const tabs = await chrome.tabs.query({ url: "https://music.youtube.com/*" });
@@ -62,4 +65,14 @@ function moveYouTubeMusicQueue(from, to) {
 
 function playYouTubeMusicQueue(index) {
   document.querySelector("#queue")?.dispatch?.({ type: "SET_INDEX", payload: index });
+}
+
+function toggleYouTubeMusicLike() {
+  const renderer = document.querySelector("ytmusic-player-bar ytmusic-like-button-renderer");
+  const buttons = [...(renderer?.querySelectorAll("button") || [])];
+  const button = buttons.find(candidate => {
+    const label = `${candidate.getAttribute("aria-label") || ""} ${candidate.getAttribute("title") || ""}`.toLowerCase();
+    return label.includes("like") && !label.includes("dislike");
+  }) || buttons[0];
+  button?.click();
 }
