@@ -43,6 +43,9 @@ function stop() {
 function publish() {
   if (!active) return;
   try {
+    // Chrome leaves the old isolated world alive briefly when an unpacked
+    // extension is reloaded. Do not call any runtime API from that world.
+    if (!chrome?.runtime?.id) { stop(); return; }
     const pending = chrome.runtime.sendMessage({ type: "ytm-state", liked: liked(), queue: queue() });
     pending?.catch(error => {
       if (String(error).includes("Extension context invalidated")) stop();
@@ -51,11 +54,17 @@ function publish() {
     if (String(error).includes("Extension context invalidated")) stop();
   }
 }
-chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type !== "toggle-like") return;
-  const button = likeButton(); if (button) { button.click(); setTimeout(publish, 300); }
-});
+try {
+  if (!chrome?.runtime?.id) stop();
+  else chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "toggle-like") return;
+    const button = likeButton(); if (button) { button.click(); setTimeout(publish, 300); }
+  });
+} catch { stop(); }
 observer = new MutationObserver(publish);
-observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["aria-pressed", "like-status", "title", "aria-label"] });
-publishTimer = setInterval(publish, 1000);
-publish();
+if (active) {
+  observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["aria-pressed", "like-status", "title", "aria-label"] });
+  publishTimer = setInterval(publish, 1000);
+  window.addEventListener("pagehide", stop, { once: true });
+  publish();
+}
