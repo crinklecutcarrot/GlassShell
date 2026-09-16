@@ -22,7 +22,7 @@ internal sealed class UiRegressionTest
         var checks = new Dictionary<string, bool>(); string? error = null; Window? fixture = null; Native.GetCursorPos(out var originalCursor); try
         {
             Directory.CreateDirectory("artifacts/ui-regression");
-            await Task.Delay(700); checks["idle bar"] = !s.Bar.MusicVisible && !s.Bar.TimerVisible && s.Bar.ReservedHeight == 36; checks["dock is visible on desktop"] = s.Dock.IsVisible && s.Dock.Revealed && s.Dock.Width >= 78; await Capture(s.Dock, "dock.png");
+            await Task.Delay(700); checks["idle bar"] = !s.Bar.MusicVisible && !s.Bar.TimerVisible && s.Bar.ReservedHeight == 36;
             s.Media.SetTestState(true);
             var enteringCenter = (StackPanel)s.Bar.Glass.Content.Children[2];
             var enteringMusic = (Button)enteringCenter.Children[0];

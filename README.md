@@ -1,6 +1,6 @@
 # GlassShell
 
-A Windows desktop shell prototype with a glass top status bar and compact bottom dock. Target display: 4K, 150% scaling, 60 Hz, SDR.
+A Windows desktop prototype with a glass top status bar. The custom dock and Dynamic Island have been removed. Target display: 4K, 150% scaling, 60 Hz, SDR.
 
 ## Run
 
@@ -23,12 +23,10 @@ The setup script downloads the pinned .NET SDK and Zig compiler from their offic
 - Bundled DM Sans with -0.01em tracking and Tabler vector icons, available offline.
 - Native notification banners remain. The top-bar tray button opens Explorer's real notification-area overflow at the bottom of the screen, preserving native icon menus and behavior. Control Center provides volume actions and settings links.
 - Fullscreen application detection hides the shell. HDR/exclusive games have not been tested.
-- The bottom dock imports Windows taskbar pins, adds running applications, groups multiple windows, and provides launch/focus/minimize behavior. Hovering a running app opens its window list. Right-click pins or unpins an app and moves pinned items. The native taskbar is hidden while GlassShell runs and restored on exit.
-- The dock remains visible on the desktop and with ordinary windows. Maximized windows hide it and release its bottom work-area reservation; touching the bottom screen edge reveals it temporarily.
 
 ## Native taskbar
 
-GlassShell temporarily enables Explorer's auto-hide state and hides the native taskbar while the custom dock is active. It restores the previous taskbar state and visibility during normal exit, handled application errors, and process shutdown. The proposed Windhawk configuration in `config/` is retained as reference and is not required.
+The Windows taskbar remains available during tray-manager validation. A proposed Windhawk DockLike configuration is in `config/`; no Explorer styling has been installed or applied. See `config/README.md` for details and sources.
 
 ## YouTube Music likes
 

@@ -6,7 +6,6 @@ namespace GlassShell;
 
 internal static class Native
 {
-    static UIntPtr taskbarState; static bool replacingTaskbar;
     internal const int GwlExStyle = -20, WsExToolWindow = 0x80, WsExNoActivate = 0x08000000;
     internal const int WmHotkey = 0x0312, WmDisplayChange = 0x007E, WmDpiChanged = 0x02E0;
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left, Top, Right, Bottom; public int Width => Right - Left; public int Height => Bottom - Top; }
@@ -35,8 +34,6 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll")] internal static extern bool ShowWindow(IntPtr hwnd, int command);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern IntPtr FindWindow(string? className, string? windowName);
-    [DllImport("user32.dll")] internal static extern bool BringWindowToTop(IntPtr hwnd);
     [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumWindowsProc callback, IntPtr param);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int count);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetClassName(IntPtr hwnd, StringBuilder text, int count);
@@ -68,17 +65,5 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential)] internal struct ThumbnailProperties { public uint Flags; public Rect Destination, Source; public byte Opacity; [MarshalAs(UnmanagedType.Bool)] public bool Visible; [MarshalAs(UnmanagedType.Bool)] public bool ClientOnly; }
     internal static string Title(IntPtr hwnd) { var b = new StringBuilder(512); GetWindowText(hwnd, b, b.Capacity); return b.ToString(); }
     internal static string Class(IntPtr hwnd) { var b = new StringBuilder(128); GetClassName(hwnd, b, b.Capacity); return b.ToString(); }
-    internal static void SetTaskbarsVisible(bool visible)
-    {
-        EnumWindows((window, _) => { string c = Class(window); if (c is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") ShowWindow(window, visible ? 5 : 0); return true; }, IntPtr.Zero);
-    }
-    internal static void BeginTaskbarReplacement()
-    {
-        if (replacingTaskbar) return; var data = new AppBarData { Size = (uint)Marshal.SizeOf<AppBarData>() }; taskbarState = SHAppBarMessage(4, ref data); data.Param = new IntPtr(1); SHAppBarMessage(10, ref data); replacingTaskbar = true; SetTaskbarsVisible(false);
-    }
-    internal static void EndTaskbarReplacement()
-    {
-        if (!replacingTaskbar) return; var data = new AppBarData { Size = (uint)Marshal.SizeOf<AppBarData>(), Param = new IntPtr(unchecked((long)taskbarState.ToUInt64())) }; SHAppBarMessage(10, ref data); SetTaskbarsVisible(true); replacingTaskbar = false;
-    }
     internal static void Shortcut(byte key, bool win = true) { if (win) keybd_event(0x5B, 0, 0, UIntPtr.Zero); keybd_event(key, 0, 0, UIntPtr.Zero); keybd_event(key, 0, 2, UIntPtr.Zero); if (win) keybd_event(0x5B, 0, 2, UIntPtr.Zero); }
 }
