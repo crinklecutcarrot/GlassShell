@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,9 +12,9 @@ internal sealed class StatusBar : ShellWindow
 {
     public double ReservedHeight { get; private set; } = 36; public double VisualHeight => height.Value;
     readonly Spring height = new(36); readonly ShellController owner; uint callback; bool registered, positioning;
-    readonly Dictionary<string, Button> anchors = new(); readonly TextBlock clock = Ui.Text("", 12), title = Ui.Text("", 12, weight: FontWeights.SemiBold), artist = Ui.Text("", 10, Ui.Muted), time = Ui.Text("", 14);
+    readonly Dictionary<string, Button> anchors = new(); readonly TextBlock clock = Ui.Text("", 11), date = Ui.Text("", 9, Ui.Muted), title = Ui.Text("", 12, weight: FontWeights.SemiBold), artist = Ui.Text("", 10, Ui.Muted), time = Ui.Text("", 14);
     readonly RoundedImage art = new(30, 30, 6) { Margin = new Thickness(0, 0, 9, 0) };
-    readonly StackPanel musicLabels; readonly Image timerIcon = TablerIcon.Create("stopwatch", 16); bool? lastExpired; bool? lastPlaying; readonly Button music, timerButton, play, previous, next; readonly Grid divider; readonly TimerRing ring = new();
+    readonly StackPanel musicLabels; readonly Image timerIcon = TablerIcon.Create("stopwatch", 16), wifiIcon = TablerIcon.Create("wifi-off", 16), soundIcon = TablerIcon.Create("volume-2", 16); bool? lastExpired; bool? lastPlaying; readonly Button music, timerButton, play, previous, next; readonly Grid divider; readonly TimerRing ring = new();
     int displayedTrack = -1, targetTrack = -1, trackAnimation;
     bool musicShown, timerShown, dividerShown;
     public bool MusicVisible => music.Visibility == Visibility.Visible; public bool TimerVisible => timerButton.Visibility == Visibility.Visible;
@@ -21,10 +22,12 @@ internal sealed class StatusBar : ShellWindow
     {
         owner = controller; Glass.TintAmount = .48; Glass.BottomBorderOnly = true;
         var left = Ui.Row(Link("layout-grid", "Widgets", "widgets"), Link("stopwatch", "Timer", "timer"), Link("pencil", "Notes", "notes")); left.HorizontalAlignment = HorizontalAlignment.Left; left.VerticalAlignment = VerticalAlignment.Center; left.Margin = new Thickness(10, 0, 0, 0); Glass.Content.Children.Add(left);
-        var nativeTray = Ui.Icon("apps", "Windows tray", owner.Tray.ShowNativeOverflow, 28);
-        var nativeControls = Ui.Icon("adjustments-horizontal", "Windows quick settings", () => OpenWindowsFlyout(0x41), 28);
+        var nativeTray = Ui.Icon("chevron-down", "Windows tray", owner.Tray.ShowNativeOverflow, 28);
+        soundIcon.Margin = new Thickness(4, 0, 0, 0);
+        var nativeControls = Ui.Button("", () => OpenWindowsFlyout(0x41), 52, 28); nativeControls.ToolTip = "Windows quick settings"; nativeControls.Content = Ui.Row(wifiIcon, soundIcon);
         var nativeNotifications = Ui.Icon("bell", "Windows notifications", () => OpenWindowsFlyout(0x4E), 28);
-        var right = Ui.Row(nativeTray, nativeControls, nativeNotifications, clock, Link("dots", "Session", "session")); right.HorizontalAlignment = HorizontalAlignment.Right; right.VerticalAlignment = VerticalAlignment.Center; right.Margin = new Thickness(0, 0, 10, 0); clock.Margin = new Thickness(12, 0, 6, 0); Glass.Content.Children.Add(right);
+        var dateTime = new StackPanel { Width = 78, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 5, 0) }; date.HorizontalAlignment = clock.HorizontalAlignment = HorizontalAlignment.Right; dateTime.Children.Add(date); dateTime.Children.Add(clock);
+        var right = Ui.Row(nativeTray, nativeControls, nativeNotifications, dateTime); right.HorizontalAlignment = HorizontalAlignment.Right; right.VerticalAlignment = VerticalAlignment.Center; right.Margin = new Thickness(0, 0, 10, 0); Glass.Content.Children.Add(right);
         musicLabels = new StackPanel { Width = 185, VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(title); musicLabels.Children.Add(artist);
         previous = Ui.Icon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 28); play = Ui.Icon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 28); next = Ui.Icon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 28);
         music = Ui.Button("", () => owner.OpenPanel("music"), 342, 46); music.Margin = new Thickness(0); music.Padding = new Thickness(8); music.ClipToBounds = true; music.Tag = "music"; anchors["music"] = music; music.Content = Ui.Row(art, musicLabels, previous, play, next);
@@ -44,7 +47,10 @@ internal sealed class StatusBar : ShellWindow
     public double AnchorCenter(string page) { if (anchors.TryGetValue(page, out var b) && b.IsVisible) return b.PointToScreen(new Point(b.ActualWidth / 2, 0)).X / Scale; return Left + Width / 2; }
     public void Tick()
     {
-        clock.Text = DateTime.Now.ToString("ddd d MMM   h:mm tt"); var m = owner.Media;
+        date.Text = DateTime.Now.ToString("ddd, MMM d"); clock.Text = DateTime.Now.ToString("h:mm tt");
+        bool connected = owner.Connectivity.Networks.Any(x => x.Connected); wifiIcon.Source = TablerIcon.Create(connected ? "wifi" : "wifi-off", 16).Source;
+        if (owner.Audio.RefreshIfDue()) soundIcon.Source = TablerIcon.Create(owner.Audio.Muted || owner.Audio.Volume <= .001f ? "volume-off" : "volume-2", 16).Source;
+        var m = owner.Media;
         SetActivityVisible(music, m.Visible, ref musicShown, -12, 342);
         SetActivityVisible(timerButton, owner.Model.TimerActive, ref timerShown, 12, 160);
         SetActivityVisible(divider, m.Visible && owner.Model.TimerActive, ref dividerShown, 0, 25);

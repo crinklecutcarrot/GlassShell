@@ -28,6 +28,8 @@ The setup script downloads the pinned .NET SDK and Zig compiler from their offic
 
 The native Windows taskbar remains responsible for pinned apps, running apps, jump lists, previews, and drag behavior. Windhawk's Windows 11 Taskbar Styler applies its DockLike theme so the taskbar hugs those application buttons as a fully rounded floating dock, while custom styles hide and disable Explorer's right-side tray controls and clock. Run `tools/Apply-NativeTaskbar.ps1` as administrator to reapply it, or add `-Restore` to restore the settings backup.
 
+The status bar replaces the session ellipsis with a down-chevron shortcut to Explorer's native tray overflow. Its paired Wi-Fi and volume icons reflect the current connection, mute, and volume state and open Windows Quick Settings. Date and time are stacked beside the native notification-center button. GlassShell's Widgets, Live Glass, and Quit actions are available from the GlassShell notification icon's right-click menu.
+
 ## YouTube Music likes
 
 Windows media sessions do not expose song ratings. GlassShell includes a local Chrome extension bridge in `extension/youtube-music` so the heart reflects and clicks YouTube Music's real Like control. In `chrome://extensions`, enable Developer mode, choose **Load unpacked**, select that folder, and reload the YouTube Music tab once. Communication stays on `127.0.0.1:45971`; the heart remains disabled until the extension connects.
