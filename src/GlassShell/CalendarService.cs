@@ -14,7 +14,8 @@ using System.Threading.Tasks;
 
 namespace GlassShell;
 
-internal sealed record CalendarEvent(string Id, string Title, string Description, string Location, DateTimeOffset Start, DateTimeOffset End, bool AllDay, string Color, string JoinUrl, string WebUrl);
+internal sealed record CalendarAttendee(string Name, string Email, string Response);
+internal sealed record CalendarEvent(string Id, string Title, string Description, string Location, DateTimeOffset Start, DateTimeOffset End, bool AllDay, string Color, string JoinUrl, string WebUrl, IReadOnlyList<CalendarAttendee> Attendees);
 
 internal sealed class CalendarService
 {
@@ -105,7 +106,7 @@ internal sealed class CalendarService
                     if (allDay) { start = new DateTimeOffset(DateTime.Parse(startDate.GetString()!).Date); end = new DateTimeOffset(DateTime.Parse(item.GetProperty("end").GetProperty("date").GetString()!).Date); }
                     else { start = DateTimeOffset.Parse(item.GetProperty("start").GetProperty("dateTime").GetString()!).ToLocalTime(); end = DateTimeOffset.Parse(item.GetProperty("end").GetProperty("dateTime").GetString()!).ToLocalTime(); }
                     string join = item.TryGetProperty("hangoutLink", out var hangout) ? hangout.GetString() ?? "" : ConferenceLink(item); string eventColor = item.TryGetProperty("colorId", out var colorId) && eventColors.TryGetValue(colorId.GetString() ?? "", out var overrideColor) ? overrideColor : color;
-                    gathered.Add(new(item.GetProperty("id").GetString() ?? Guid.NewGuid().ToString(), Text(item, "summary", "Untitled event"), Text(item, "description"), Text(item, "location"), start, end, allDay, eventColor, join, Text(item, "htmlLink")));
+                    gathered.Add(new(item.GetProperty("id").GetString() ?? Guid.NewGuid().ToString(), Text(item, "summary", "Untitled event"), Text(item, "description"), Text(item, "location"), start, end, allDay, eventColor, join, Text(item, "htmlLink"), Attendees(item)));
                 }
             }
             events = gathered.OrderBy(x => x.Start).ToList(); Message = "";
@@ -125,6 +126,7 @@ internal sealed class CalendarService
     async Task<JsonDocument> Get(string url) { using var request = new HttpRequestMessage(HttpMethod.Get, url); request.Headers.Authorization = new("Bearer", token!.AccessToken); using var response = await http.SendAsync(request); response.EnsureSuccessStatusCode(); return JsonDocument.Parse(await response.Content.ReadAsStringAsync()); }
     void SaveToken() { byte[] json = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(token, JsonOptions)); File.WriteAllText(TokenPath, Convert.ToBase64String(Protect(json))); }
     static string ConferenceLink(JsonElement item) { if (!item.TryGetProperty("conferenceData", out var data) || !data.TryGetProperty("entryPoints", out var points)) return ""; foreach (var point in points.EnumerateArray()) if (point.TryGetProperty("entryPointType", out var type) && type.GetString() == "video") return Text(point, "uri"); return ""; }
+    static IReadOnlyList<CalendarAttendee> Attendees(JsonElement item) { var result = new List<CalendarAttendee>(); if (!item.TryGetProperty("attendees", out var attendees)) return result; foreach (var attendee in attendees.EnumerateArray()) { string email = Text(attendee, "email"); string name = Text(attendee, "displayName"); if (name.Length == 0) name = email.Split('@')[0]; result.Add(new(name, email, Text(attendee, "responseStatus", "needsAction"))); } return result; }
     static string Text(JsonElement item, string name, string fallback = "") => item.TryGetProperty(name, out var value) ? value.GetString() ?? fallback : fallback;
     static string Form(Dictionary<string, string> values) => string.Join("&", values.Select(x => Uri.EscapeDataString(x.Key) + "=" + Uri.EscapeDataString(x.Value)));
     static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
