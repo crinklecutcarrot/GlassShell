@@ -6,7 +6,7 @@ The September 13 redesign replaces the custom bottom dock and floating island wi
 - Center is empty without activities. Music remains visible while paused. Music appears first, then a divider with 12 DIP on either side, then an active timer.
 - Music shows artwork, title, artist and transport buttons. Its hoverable surface opens a dropdown with progress, seeking when supported, and transport controls.
 - Timer displays an icon inside a decreasing circular progress ring and a live countdown. At zero it keeps counting negative; Time’s Up appears below with Stop. Outside dismissal does not cancel the timer. Notes must not be displaced by expiry.
-- Right: background apps, control center, notifications, clock/date, session menu.
+- Right: background apps, live Wi-Fi/volume controls, notifications, and a vertically stacked clock/date. The clock opens a wide read-only calendar. Day and seven-column Week tabs keep the same window width; event details expose Google Calendar and join-call links. A numeric badge beside the date counts events that start within an hour or are in progress.
 - Idle bar 36 DIP; activity bar 56 DIP. A stable 56-DIP host prevents capture reallocations during height animation. Work-area reservation grows before activity presentation and shrinks after collapse.
 - Dropdowns appear below their anchors and dismiss on outside click without swallowing the click. Notes save atomically. Shared rounded glass clips prevent square-corner flashes. Content and optical layers remain separate.
 - DM Sans with -0.01em tracking and Tabler icons throughout.

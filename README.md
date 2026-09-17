@@ -21,7 +21,8 @@ The setup script downloads the pinned .NET SDK and Zig compiler from their offic
 - The bar smoothly grows from 36 to 56 DIP for activities. An AppBar reserves that space for normal maximized windows; reservation returns to 36 DIP when activities end. Dropdowns overlay applications.
 - Outside clicks dismiss dropdowns and continue to the underlying application. Notes use atomic local autosave and save before dismissal. Stored at `%LOCALAPPDATA%/GlassShell/quick-note.txt`. Notion sync is not implemented. Timers are session-only.
 - Bundled DM Sans with -0.01em tracking and Tabler vector icons, available offline.
-- Native notification banners remain. The top-bar tray button opens Explorer's real notification-area overflow at the bottom of the screen, preserving native icon menus and behavior. Control Center provides volume actions and settings links.
+- Native notification banners remain. The top-bar tray button opens Explorer's real notification-area overflow at the bottom of the screen, preserving native icon menus and behavior. The paired Wi-Fi/volume control opens Windows Quick Settings, and the notification button opens Windows Notification Center.
+- Date and time are stacked into one button. It opens a wide read-only Google Calendar with Day and seven-column Week views, event detail pages, and join-call links. A badge to the left of the date counts events starting within the next hour or currently in progress and remains until those events end.
 - Fullscreen application detection hides the shell. HDR/exclusive games have not been tested.
 
 ## Native taskbar
@@ -33,6 +34,12 @@ The status bar replaces the session ellipsis with a down-chevron shortcut to Exp
 ## YouTube Music likes
 
 Windows media sessions do not expose song ratings. GlassShell includes a local Chrome extension bridge in `extension/youtube-music` so the heart reflects and clicks YouTube Music's real Like control. In `chrome://extensions`, enable Developer mode, choose **Load unpacked**, select that folder, and reload the YouTube Music tab once. Communication stays on `127.0.0.1:45971`; the heart remains disabled until the extension connects.
+
+## Google Calendar
+
+Create an OAuth 2.0 **Desktop app** client in Google Cloud, with the Google Calendar API enabled. Copy `%LOCALAPPDATA%\GlassShell\google-calendar-oauth.template.json` to `google-calendar-oauth.json`, replace the client ID and client secret, restart GlassShell, then click the stacked date/time and **Connect Google Calendar**. If the OAuth consent screen is in Testing, add your Google account as a test user.
+
+GlassShell requests only `calendar.readonly`, loads every calendar marked visible in that Google account, and stores the refresh token encrypted for the current Windows user with DPAPI. It refreshes in the background every five minutes. The calendar cannot create, edit, or delete events.
 
 ## Material
 

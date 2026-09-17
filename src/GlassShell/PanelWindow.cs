@@ -13,7 +13,7 @@ namespace GlassShell;
 
 internal sealed class PanelWindow : ShellWindow
 {
-    readonly ShellController owner; readonly DispatcherTimer queueAutoScroll = new() { Interval = TimeSpan.FromMilliseconds(32) }; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; ScrollViewer? queueScroll; Border? seekPreview, queueDragRow; QueueTrack? queueDragTrack; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation, queueDropIndex = -1, queueRenderedCount; double panelHeight = 410, queueDragOpacity; Point queuePointer;
+    readonly ShellController owner; readonly DispatcherTimer queueAutoScroll = new() { Interval = TimeSpan.FromMilliseconds(32) }; string current = "", queueSignature = ""; TextBox? note; TextBlock? live, elapsed, total, musicTitle, musicArtist, radioState, queueTitle, queueArtist; Slider? seek; RoundedImage? art; Image? mediaBackdrop; StackPanel? musicLabels, connectivityBody, queueList; ScrollViewer? queueScroll; Border? seekPreview, queueDragRow; QueueTrack? queueDragTrack; Button? play, pause, prev, next, like, queuePlay; ToggleButton? radioToggle; ProgressBar? timerProgress; Button? addMinute; bool dragging, calendarWeek; bool? lastPlaying, lastRunning, lastLiked; int displayedTrack = -1, targetTrack = -1, trackAnimation, queueDropIndex = -1, queueRenderedCount; double panelHeight = 410, queueDragOpacity; Point queuePointer; DateTime calendarDate = DateTime.Today; CalendarEvent? selectedCalendarEvent;
     public string CurrentPage => current; public bool IsOpen { get; private set; }
     public int PresentationVersion { get; private set; }
     public PanelWindow(ShellController controller) : base("GlassShell · Panel", 420, 410) { owner = controller; Glass.TintAmount = .66; PreviewMouseMove += QueueDragMove; PreviewMouseLeftButtonUp += QueueDragEnd; queueAutoScroll.Tick += (_, _) => AutoScrollQueue(); }
@@ -66,18 +66,20 @@ internal sealed class PanelWindow : ShellWindow
     public void HideImmediately() { if (!SaveNote()) return; IsOpen = false; PresentationVersion++; SetInput(false); Glass.BeginAnimation(OpacityProperty, null); Glass.Opacity = 0; BeginAnimation(OpacityProperty, null); Opacity = 0; Hide(); }
     public void RefreshTray() { if (IsOpen && current == "tray") { Build(); PositionSurface(); UpdateLayout(); } }
     public void RefreshConnectivity() { if (IsOpen && connectivityBody != null && current is "controls" or "wifi" or "bluetooth") { UpdateRadioHeader(); PopulateConnectivity(); } }
-    public override void PositionSurface() { double anchor = owner.Bar.AnchorCenter(current switch { "wifi" or "bluetooth" => "controls", "queue" => "music", _ => current }); Left = Math.Clamp(anchor - Width / 2, owner.Bar.Left + 8, owner.Bar.Left + owner.Bar.Width - Width - 8); Top = owner.Bar.Top + owner.Bar.VisualHeight + 8; Shape(0, 0, Width, panelHeight, 25); }
+    public void RefreshCalendar() { if (IsOpen && current is "calendar" or "calendar-detail") { Build(); PositionSurface(); UpdateLayout(); } }
+    public override void PositionSurface() { double anchor = owner.Bar.AnchorCenter(current switch { "wifi" or "bluetooth" => "controls", "queue" => "music", "calendar-detail" => "calendar", _ => current }); Left = Math.Clamp(anchor - Width / 2, owner.Bar.Left + 8, owner.Bar.Left + owner.Bar.Width - Width - 8); Top = owner.Bar.Top + owner.Bar.VisualHeight + 8; Shape(0, 0, Width, panelHeight, 25); }
     void Build()
     {
         var trayIcons = current == "tray" ? owner.Tray.Icons : Array.Empty<TrayIconItem>();
-        EndQueueDrag(false); bool mediaPage = current is "music" or "queue"; Width = mediaPage ? 350 : 420; panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 365, "queue" => 440, "notifications" => 260, "controls" or "wifi" or "bluetooth" => 400, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; queueSignature = ""; queueRenderedCount = 0; note = null; live = elapsed = total = musicTitle = musicArtist = radioState = queueTitle = queueArtist = null; radioToggle = null; timerProgress = null; addMinute = null; seek = null; seekPreview = null; art = null; mediaBackdrop = null; musicLabels = connectivityBody = queueList = null; queueScroll = null; play = pause = prev = next = like = queuePlay = null; dragging = false;
+        EndQueueDrag(false); bool mediaPage = current is "music" or "queue"; bool calendarPage = current is "calendar" or "calendar-detail"; Width = calendarPage ? 1120 : mediaPage ? 350 : 420; panelHeight = current switch { "active-timer" => 250, "timer" => 280, "widgets" => 160, "music" => 365, "queue" => 440, "calendar" or "calendar-detail" => 650, "notifications" => 260, "controls" or "wifi" or "bluetooth" => 400, "tray" => Math.Clamp(135 + Math.Ceiling(trayIcons.Count / 7.0) * 48, 190, 410), _ => 410 }; Height = panelHeight; Glass.Content.Children.Clear(); lastPlaying = lastRunning = lastLiked = null; displayedTrack = targetTrack = -1; trackAnimation++; queueSignature = ""; queueRenderedCount = 0; note = null; live = elapsed = total = musicTitle = musicArtist = radioState = queueTitle = queueArtist = null; radioToggle = null; timerProgress = null; addMinute = null; seek = null; seekPreview = null; art = null; mediaBackdrop = null; musicLabels = connectivityBody = queueList = null; queueScroll = null; play = pause = prev = next = like = queuePlay = null; dragging = false;
         if (mediaPage) AddMediaBackdrop();
         var body = new StackPanel { Margin = mediaPage ? new Thickness(18) : new Thickness(24) }; var header = new Grid();
         if (mediaPage) BuildMediaHeader(header);
         else
         {
-        if (current is "wifi" or "bluetooth") { var back = Ui.Icon("arrow-left", "Back", () => Navigate("controls"), 34); back.HorizontalAlignment = HorizontalAlignment.Left; back.Margin = new Thickness(-3, -3, 0, -3); header.Children.Add(back); }
-        var heading = Ui.Text(current switch { "active-timer" => "Active Timer", "timer" => "Timer", "notes" => "Notes", "widgets" => "Widgets", "controls" => "Control Center", "wifi" => "Wi‑Fi", "bluetooth" => "Bluetooth", "notifications" => "Notifications", "tray" => "Background apps", _ => "GlassShell" }, 22, weight: FontWeights.SemiBold); if (current is "wifi" or "bluetooth") heading.Margin = new Thickness(44, 0, 0, 0); header.Children.Add(heading); var close = Ui.Icon("x", "Close", Dismiss, 30); close.HorizontalAlignment = HorizontalAlignment.Right; Panel.SetZIndex(close, 10); header.Children.Add(close);
+        if (current is "wifi" or "bluetooth" or "calendar-detail") { var back = Ui.Icon("arrow-left", "Back", () => Navigate(current == "calendar-detail" ? "calendar" : "controls"), 34); back.HorizontalAlignment = HorizontalAlignment.Left; back.Margin = new Thickness(-3, -3, 0, -3); header.Children.Add(back); }
+        var heading = Ui.Text(current switch { "active-timer" => "Active Timer", "timer" => "Timer", "notes" => "Notes", "widgets" => "Widgets", "controls" => "Control Center", "wifi" => "Wi‑Fi", "bluetooth" => "Bluetooth", "notifications" => "Notifications", "tray" => "Background apps", "calendar" => "Calendar", "calendar-detail" => "Event details", _ => "GlassShell" }, 22, weight: FontWeights.SemiBold); if (current is "wifi" or "bluetooth" or "calendar-detail") heading.Margin = new Thickness(44, 0, 0, 0); header.Children.Add(heading); var close = Ui.Icon("x", "Close", Dismiss, 30); close.HorizontalAlignment = HorizontalAlignment.Right; Panel.SetZIndex(close, 10); header.Children.Add(close);
+        if (current == "calendar") { var day = Ui.Button("Day", () => { calendarWeek = false; Build(); }, 58, 30); var week = Ui.Button("Week", () => { calendarWeek = true; Build(); }, 62, 30); day.Background = !calendarWeek ? new SolidColorBrush(Color.FromArgb(56, 255, 255, 255)) : Brushes.Transparent; week.Background = calendarWeek ? new SolidColorBrush(Color.FromArgb(56, 255, 255, 255)) : Brushes.Transparent; var tabs = Ui.Row(day, week); tabs.HorizontalAlignment = HorizontalAlignment.Right; tabs.Margin = new Thickness(0, 0, 40, 0); header.Children.Add(tabs); }
         }
         if (current is "wifi" or "bluetooth") { bool wifi = current == "wifi"; radioState = Ui.Text("", 12, Ui.Muted); radioToggle = Ui.Toggle(false, () => _ = owner.Connectivity.ToggleRadio(wifi ? Windows.Devices.Radios.RadioKind.WiFi : Windows.Devices.Radios.RadioKind.Bluetooth)); var state = Ui.Row(radioState, radioToggle); radioState.Margin = new Thickness(0, 0, 8, 0); state.HorizontalAlignment = HorizontalAlignment.Right; state.Margin = new Thickness(0, 0, 40, 0); header.Children.Add(state); UpdateRadioHeader(); }
         body.Children.Add(header); body.Children.Add(new Border { Height = mediaPage ? 12 : 18 });
@@ -115,6 +117,8 @@ internal sealed class PanelWindow : ShellWindow
                 queueArtist = Ui.Text("", 13, Ui.Muted); queueTitle = Ui.Text("", 19, weight: FontWeights.SemiBold); var queueLabels = new StackPanel { Width = 170, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(2, 0, 0, 0) }; queueLabels.Children.Add(queueArtist); queueLabels.Children.Add(queueTitle); var queuePrev = MediaIcon("player-skip-back", "Previous", () => _ = owner.Media.Control("previous"), 34); queuePlay = MediaIcon("player-play", "Play / pause", () => _ = owner.Media.Control("toggle"), 36); var queueNext = MediaIcon("player-skip-forward", "Next", () => _ = owner.Media.Control("next"), 34); var mini = new Grid(); mini.ColumnDefinitions.Add(new ColumnDefinition()); mini.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); mini.Children.Add(queueLabels); var miniControls = Ui.Row(queuePrev, queuePlay, queueNext); Grid.SetColumn(miniControls, 1); mini.Children.Add(miniControls); body.Children.Add(mini);
                 body.Children.Add(new Border { Height = 12 }); var upNext = Ui.Text("Up next", 16, Ui.White, FontWeights.SemiBold); upNext.Margin = new Thickness(2, 0, 0, 8); body.Children.Add(upNext); queueList = new StackPanel(); queueScroll = new ScrollViewer { Content = queueList, Height = 275, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly }; queueScroll.ScrollChanged += QueueScrolled; body.Children.Add(queueScroll); PopulateQueue(); break;
             case "widgets": body.Children.Add(Ui.Text("Your widgets will live here.", 14, Ui.Muted)); break;
+            case "calendar": BuildCalendar(body); break;
+            case "calendar-detail": BuildCalendarDetail(body); break;
             case "controls":
             case "wifi":
             case "bluetooth": connectivityBody = new StackPanel(); body.Children.Add(connectivityBody); PopulateConnectivity(); break;
@@ -146,6 +150,75 @@ internal sealed class PanelWindow : ShellWindow
         }
         Glass.Content.Children.Add(body);
     }
+    void BuildCalendar(StackPanel body)
+    {
+        var service = owner.Calendar;
+        if (!service.Configured || !service.Connected)
+        {
+            var setup = Ui.Text("Connect one Google account to show every calendar currently marked visible. Access is read-only.", 15, Ui.Muted); setup.TextWrapping = TextWrapping.Wrap; setup.TextTrimming = TextTrimming.None; body.Children.Add(setup);
+            body.Children.Add(new Border { Height = 18 });
+            body.Children.Add(Ui.Button("Open calendar setup folder", () => Ui.Open(Storage.Root), 260, 42));
+            body.Children.Add(Ui.Button(service.Busy ? "Waiting for Google…" : "Connect Google Calendar", () => _ = service.Connect(), 260, 42));
+            var hint = Ui.Text("Copy google-calendar-oauth.template.json to google-calendar-oauth.json and add a Google Desktop OAuth client ID and secret, then choose Connect.", 12, Ui.Muted); hint.TextWrapping = TextWrapping.Wrap; hint.TextTrimming = TextTrimming.None; hint.Margin = new Thickness(4, 14, 0, 0); body.Children.Add(hint);
+            if (service.Message.Length > 0) body.Children.Add(Message(service.Message));
+            return;
+        }
+
+        var toolbar = new Grid(); toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); toolbar.ColumnDefinitions.Add(new ColumnDefinition()); toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var previousDay = Ui.Icon("arrow-left", calendarWeek ? "Previous week" : "Previous day", () => ShiftCalendar(calendarWeek ? -7 : -1), 38); var nextDay = Ui.Icon("arrow-right", calendarWeek ? "Next week" : "Next day", () => ShiftCalendar(calendarWeek ? 7 : 1), 38);
+        var nav = Ui.Row(previousDay, nextDay); toolbar.Children.Add(nav);
+        string range = calendarWeek ? $"{WeekStart(calendarDate):MMM d} – {WeekStart(calendarDate).AddDays(6):MMM d, yyyy}" : calendarDate.ToString("dddd, MMMM d, yyyy"); var rangeText = Ui.Text(range, 18, weight: FontWeights.SemiBold); rangeText.HorizontalAlignment = HorizontalAlignment.Center; Grid.SetColumn(rangeText, 1); toolbar.Children.Add(rangeText);
+        var today = Ui.Button("Today", () => { calendarDate = DateTime.Today; Build(); }, 72, 36); Grid.SetColumn(today, 2); toolbar.Children.Add(today); body.Children.Add(toolbar); body.Children.Add(new Border { Height = 14 });
+        if (service.Busy && service.Events.Count == 0) { body.Children.Add(Ui.Text("Loading calendars…", 14, Ui.Muted)); return; }
+        if (service.Message.Length > 0) body.Children.Add(Message(service.Message));
+        if (calendarWeek) BuildCalendarWeek(body); else BuildCalendarDay(body);
+    }
+    void BuildCalendarDay(StackPanel body)
+    {
+        var list = new StackPanel(); var dayEvents = EventsForDay(calendarDate).ToArray();
+        if (dayEvents.Length == 0) list.Children.Add(Ui.Text("No events scheduled.", 14, Ui.Muted));
+        foreach (var item in dayEvents) list.Children.Add(CalendarEventCard(item, false));
+        body.Children.Add(new ScrollViewer { Content = list, Height = 490, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly });
+    }
+    void BuildCalendarWeek(StackPanel body)
+    {
+        DateTime start = WeekStart(calendarDate); var grid = new Grid();
+        for (int i = 0; i < 7; i++) grid.ColumnDefinitions.Add(new ColumnDefinition());
+        for (int i = 0; i < 7; i++)
+        {
+            DateTime day = start.AddDays(i); var column = new StackPanel { Margin = new Thickness(i == 0 ? 0 : 4, 0, i == 6 ? 0 : 4, 0) };
+            var dayName = Ui.Text(day.ToString("ddd"), 11, Ui.Muted, FontWeights.SemiBold); var dayNumber = Ui.Text(day.ToString("d"), 17, weight: FontWeights.SemiBold); column.Children.Add(dayName); column.Children.Add(dayNumber); column.Children.Add(new Border { Height = 10 });
+            var items = EventsForDay(day).ToArray(); if (items.Length == 0) column.Children.Add(Ui.Text("No events", 11, Ui.Muted)); else foreach (var item in items) column.Children.Add(CalendarEventCard(item, true));
+            var surface = new Border { Child = column, Padding = new Thickness(9), CornerRadius = new CornerRadius(14), Background = new SolidColorBrush(Color.FromArgb(day.Date == DateTime.Today ? (byte)28 : (byte)12, 255, 255, 255)) }; Grid.SetColumn(surface, i); grid.Children.Add(surface);
+        }
+        body.Children.Add(new ScrollViewer { Content = grid, Height = 490, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly });
+    }
+    Border CalendarEventCard(CalendarEvent item, bool compact)
+    {
+        var stripe = new Border { Width = 5, Background = CalendarColor(item.Color), CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 2, compact ? 7 : 12, 2) };
+        var labels = new StackPanel(); labels.Children.Add(Ui.Text(item.AllDay ? "All day" : $"{item.Start:h:mm tt}–{item.End:h:mm tt}", compact ? 10 : 12, Ui.Muted)); var titleText = Ui.Text(item.Title, compact ? 12 : 17, weight: FontWeights.SemiBold); titleText.TextWrapping = TextWrapping.Wrap; titleText.TextTrimming = TextTrimming.CharacterEllipsis; labels.Children.Add(titleText);
+        if (!compact && item.Description.Length > 0) { var description = Ui.Text(item.Description, 12, Ui.Muted); description.TextWrapping = TextWrapping.Wrap; description.MaxHeight = 38; labels.Children.Add(description); }
+        var content = new Grid(); content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); content.ColumnDefinitions.Add(new ColumnDefinition()); content.Children.Add(stripe); Grid.SetColumn(labels, 1); content.Children.Add(labels);
+        var button = Ui.Button("", () => { selectedCalendarEvent = item; Navigate("calendar-detail"); }, double.NaN, compact ? 74 : 104); button.Margin = new Thickness(0); button.Padding = new Thickness(compact ? 7 : 12); button.Content = content;
+        return new Border { Child = button, Margin = new Thickness(0, 0, 0, compact ? 7 : 10), CornerRadius = new CornerRadius(14), Background = new SolidColorBrush(Color.FromArgb(16, 255, 255, 255)) };
+    }
+    void BuildCalendarDetail(StackPanel body)
+    {
+        var item = selectedCalendarEvent; if (item == null) { body.Children.Add(Ui.Text("This event is no longer available.", 14, Ui.Muted)); return; }
+        var titleRow = new Grid(); titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(7) }); titleRow.ColumnDefinitions.Add(new ColumnDefinition()); titleRow.Children.Add(new Border { Background = CalendarColor(item.Color), CornerRadius = new CornerRadius(4), Margin = new Thickness(0, 0, 16, 0) });
+        var titleStack = new StackPanel(); var eventTitle = Ui.Text(item.Title, 25, weight: FontWeights.SemiBold); eventTitle.TextWrapping = TextWrapping.Wrap; eventTitle.TextTrimming = TextTrimming.None; titleStack.Children.Add(eventTitle); if (item.Description.Length > 0) { var description = Ui.Text(item.Description, 14, Ui.Muted); description.TextWrapping = TextWrapping.Wrap; description.TextTrimming = TextTrimming.None; description.Margin = new Thickness(0, 6, 0, 0); titleStack.Children.Add(description); } Grid.SetColumn(titleStack, 1); titleRow.Children.Add(titleStack); body.Children.Add(titleRow); body.Children.Add(new Border { Height = 24 });
+        body.Children.Add(CalendarDetailLine("clock", "Time", item.AllDay ? "All day" : $"{item.Start:h:mm tt}–{item.End:h:mm tt}")); body.Children.Add(CalendarDetailLine("calendar", "Date", item.Start.ToString("dddd, MMMM d, yyyy"))); if (item.Location.Length > 0) body.Children.Add(CalendarDetailLine("link", "Location", item.Location));
+        body.Children.Add(new Border { Height = 18 }); var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        if (item.WebUrl.Length > 0) actions.Children.Add(Ui.Button("Open in Google Calendar", () => Ui.Open(item.WebUrl), 190, 46)); if (item.JoinUrl.Length > 0) actions.Children.Add(Ui.Button("Join call", () => Ui.Open(item.JoinUrl), 150, 46)); body.Children.Add(actions);
+    }
+    static Border CalendarDetailLine(string icon, string label, string value)
+    {
+        var texts = new StackPanel { Margin = new Thickness(12, 0, 0, 0) }; texts.Children.Add(Ui.Text(label, 11, Ui.Muted)); var content = Ui.Text(value, 15); content.TextWrapping = TextWrapping.Wrap; content.TextTrimming = TextTrimming.None; texts.Children.Add(content); return Card(Ui.Row(TablerIcon.Create(icon, 20), texts), new Thickness(13));
+    }
+    System.Collections.Generic.IEnumerable<CalendarEvent> EventsForDay(DateTime day) => owner.Calendar.Events.Where(x => x.Start.LocalDateTime.Date <= day.Date && x.End.LocalDateTime > day.Date).OrderBy(x => x.Start);
+    void ShiftCalendar(int days) { calendarDate = calendarDate.AddDays(days); Build(); _ = owner.Calendar.Refresh(calendarDate.AddDays(-7), calendarDate.AddDays(14)); }
+    static DateTime WeekStart(DateTime day) => day.Date.AddDays(-((7 + (int)day.DayOfWeek - (int)DayOfWeek.Monday) % 7));
+    static Brush CalendarColor(string color) { try { return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)); } catch { return Ui.WindowsAccent; } }
     void AddMediaBackdrop()
     {
         mediaBackdrop = new Image { Width = Width, Height = panelHeight, Stretch = Stretch.UniformToFill, Opacity = .92, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new Point(.5, .5), RenderTransform = new ScaleTransform(1.18, 1.18), Effect = new BlurEffect { Radius = 34, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality } };
