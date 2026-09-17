@@ -176,16 +176,34 @@ internal sealed class PanelWindow : ShellWindow
     void BuildCalendarDay(StackPanel body)
     {
         const double hourHeight = 64, gutter = 58; double timelineWidth = Width - 48, timelineHeight = hourHeight * 24;
+        var dayEvents = EventsForDay(calendarDate).ToArray(); var allDay = dayEvents.Where(x => x.AllDay).ToArray();
+        if (allDay.Length > 0)
+        {
+            var allDayRow = new Grid { Width = timelineWidth, Margin = new Thickness(0, 0, 0, 10) }; allDayRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(gutter) }); allDayRow.ColumnDefinitions.Add(new ColumnDefinition());
+            var allDayLabel = Ui.Text("ALL-DAY", 9, Ui.Muted, FontWeights.SemiBold); allDayLabel.HorizontalAlignment = HorizontalAlignment.Right; allDayLabel.Margin = new Thickness(0, 0, 10, 0); allDayRow.Children.Add(allDayLabel);
+            var allDayCards = new UniformGrid { Rows = 1, Columns = allDay.Length }; Grid.SetColumn(allDayCards, 1); allDayRow.Children.Add(allDayCards);
+            foreach (var item in allDay) { var card = CalendarEventCard(item, true); card.Margin = new Thickness(3, 0, 3, 0); allDayCards.Children.Add(card); }
+            body.Children.Add(allDayRow);
+        }
         var timeline = new Canvas { Width = timelineWidth, Height = timelineHeight, ClipToBounds = true };
         for (int hour = 0; hour < 24; hour++)
         {
             double y = hour * hourHeight; var label = Ui.Text(DateTime.Today.AddHours(hour).ToString("h tt"), 10, Ui.Muted); label.Width = gutter - 10; label.TextAlignment = TextAlignment.Right; Canvas.SetLeft(label, 0); Canvas.SetTop(label, Math.Max(0, y - 7)); timeline.Children.Add(label);
             var rule = new Border { Width = timelineWidth - gutter, Height = 1, Background = new SolidColorBrush(Color.FromArgb(22, 255, 255, 255)) }; Canvas.SetLeft(rule, gutter); Canvas.SetTop(rule, y); timeline.Children.Add(rule);
         }
-        foreach (var item in EventsForDay(calendarDate))
+        var timed = dayEvents.Where(x => !x.AllDay).OrderBy(x => x.Start).ToArray(); var placements = new System.Collections.Generic.List<(CalendarEvent Item, int Lane, int Lanes)>();
+        for (int start = 0; start < timed.Length;)
         {
-            var card = CalendarEventCard(item, false); card.Width = timelineWidth - gutter - 10; card.HorizontalAlignment = HorizontalAlignment.Left;
-            double minutes = item.AllDay ? 0 : Math.Clamp((item.Start.LocalDateTime - calendarDate.Date).TotalMinutes, 0, 1439); Canvas.SetLeft(card, gutter + 8); Canvas.SetTop(card, minutes / 60 * hourHeight + 4); Panel.SetZIndex(card, 2); timeline.Children.Add(card);
+            int end = start + 1; DateTimeOffset groupEnd = timed[start].End; while (end < timed.Length && timed[end].Start < groupEnd) { if (timed[end].End > groupEnd) groupEnd = timed[end].End; end++; }
+            var laneEnds = new System.Collections.Generic.List<DateTimeOffset>(); var group = new System.Collections.Generic.List<(CalendarEvent Item, int Lane)>();
+            for (int i = start; i < end; i++) { int lane = laneEnds.FindIndex(x => x <= timed[i].Start); if (lane < 0) { lane = laneEnds.Count; laneEnds.Add(timed[i].End); } else laneEnds[lane] = timed[i].End; group.Add((timed[i], lane)); }
+            foreach (var placed in group) placements.Add((placed.Item, placed.Lane, laneEnds.Count)); start = end;
+        }
+        double available = timelineWidth - gutter - 12;
+        foreach (var placed in placements)
+        {
+            double laneWidth = available / placed.Lanes; var card = CalendarEventCard(placed.Item, false); card.Width = Math.Max(70, laneWidth - 6); card.HorizontalAlignment = HorizontalAlignment.Left;
+            double minutes = Math.Clamp((placed.Item.Start.LocalDateTime - calendarDate.Date).TotalMinutes, 0, 1439); Canvas.SetLeft(card, gutter + 8 + placed.Lane * laneWidth); Canvas.SetTop(card, minutes / 60 * hourHeight + 4); Panel.SetZIndex(card, 2); timeline.Children.Add(card);
         }
         if (calendarDate.Date == DateTime.Today)
         {
@@ -202,21 +220,27 @@ internal sealed class PanelWindow : ShellWindow
         for (int i = 0; i < 7; i++) grid.ColumnDefinitions.Add(new ColumnDefinition());
         for (int i = 0; i < 7; i++)
         {
-            DateTime day = start.AddDays(i); var column = new StackPanel();
-            var dayName = Ui.Text(day.ToString("ddd"), 11, Ui.Muted, FontWeights.SemiBold); var dayNumber = Ui.Text(day.ToString("d"), 17, weight: FontWeights.SemiBold); column.Children.Add(dayName); column.Children.Add(dayNumber); column.Children.Add(new Border { Height = 10 });
+            DateTime day = start.AddDays(i); bool today = day.Date == DateTime.Today; var column = new StackPanel();
+            var dayName = Ui.Text(day.ToString("ddd").ToUpperInvariant(), 10, today ? Ui.WindowsAccent : Ui.Muted, FontWeights.SemiBold); dayName.HorizontalAlignment = HorizontalAlignment.Center; dayName.Margin = new Thickness(0, 0, 0, 4); var dayNumber = Ui.Text(day.Day.ToString(), 17, today ? Brushes.White : Ui.White, FontWeights.SemiBold); dayNumber.HorizontalAlignment = HorizontalAlignment.Center;
+            var numberCircle = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(17), Background = today ? Ui.WindowsAccent : Brushes.Transparent, Child = dayNumber, HorizontalAlignment = HorizontalAlignment.Center }; column.Children.Add(dayName); column.Children.Add(numberCircle); column.Children.Add(new Border { Height = 10 });
             var items = EventsForDay(day).ToArray(); if (items.Length == 0) column.Children.Add(Ui.Text("No events", 11, Ui.Muted)); else foreach (var item in items) column.Children.Add(CalendarEventCard(item, true));
-            var surface = new Border { Child = column, Padding = new Thickness(9), Margin = new Thickness(i == 0 ? 0 : 6, 0, i == 6 ? 0 : 6, 0), CornerRadius = new CornerRadius(14), Background = new SolidColorBrush(Color.FromArgb(day.Date == DateTime.Today ? (byte)28 : (byte)12, 255, 255, 255)) }; Grid.SetColumn(surface, i); grid.Children.Add(surface);
+            Brush columnFill = today ? new SolidColorBrush(Color.FromArgb(26, Ui.WindowsAccentColor.R, Ui.WindowsAccentColor.G, Ui.WindowsAccentColor.B)) : new SolidColorBrush(Color.FromArgb(12, 255, 255, 255)); var surface = new Border { Child = column, Padding = new Thickness(9), Margin = new Thickness(i == 0 ? 0 : 6, 0, i == 6 ? 0 : 6, 0), CornerRadius = new CornerRadius(14), Background = columnFill }; Grid.SetColumn(surface, i); grid.Children.Add(surface);
         }
         body.Children.Add(new ScrollViewer { Content = grid, Height = 490, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly });
     }
     Border CalendarEventCard(CalendarEvent item, bool compact)
     {
-        var stripe = new Border { Width = 5, Background = CalendarColor(item.Color), CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 2, compact ? 7 : 12, 2) };
-        var labels = new StackPanel { HorizontalAlignment = HorizontalAlignment.Left }; labels.Children.Add(Ui.Text(item.AllDay ? "All day" : $"{item.Start:h:mm tt}–{item.End:h:mm tt}", compact ? 10 : 12, Ui.Muted)); var titleText = Ui.Text(item.Title, compact ? 12 : 17, weight: FontWeights.SemiBold); titleText.TextWrapping = TextWrapping.Wrap; titleText.TextTrimming = TextTrimming.CharacterEllipsis; titleText.TextAlignment = TextAlignment.Left; labels.Children.Add(titleText);
-        if (!compact && item.Description.Length > 0) { var description = Ui.Text(item.Description, 12, Ui.Muted); description.TextWrapping = TextWrapping.Wrap; description.MaxHeight = 38; labels.Children.Add(description); }
-        var content = new Grid(); content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); content.ColumnDefinitions.Add(new ColumnDefinition()); content.Children.Add(stripe); Grid.SetColumn(labels, 1); content.Children.Add(labels);
-        var button = Ui.Button("", () => { selectedCalendarEvent = item; Navigate("calendar-detail"); }, double.NaN, double.NaN); button.Margin = new Thickness(0); button.Padding = new Thickness(compact ? 7 : 12); button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.VerticalContentAlignment = VerticalAlignment.Top; button.Content = content;
-        return new Border { Child = button, Margin = new Thickness(0, 0, 0, compact ? 7 : 10), CornerRadius = new CornerRadius(14), Background = new SolidColorBrush(Color.FromArgb(16, 255, 255, 255)) };
+        Brush foreground = EventForeground(item.Color); var labels = new StackPanel { HorizontalAlignment = HorizontalAlignment.Left };
+        var timeLabel = Ui.Text(item.AllDay ? "All day" : $"{item.Start:h:mm tt}–{item.End:h:mm tt}", compact ? 9 : 11, foreground); timeLabel.Opacity = .78; timeLabel.HorizontalAlignment = HorizontalAlignment.Left; labels.Children.Add(timeLabel);
+        var titleText = Ui.Text(item.Title, compact ? 11 : 14, foreground, FontWeights.SemiBold); titleText.TextWrapping = TextWrapping.NoWrap; titleText.TextTrimming = TextTrimming.CharacterEllipsis; titleText.TextAlignment = TextAlignment.Left; titleText.HorizontalAlignment = HorizontalAlignment.Stretch; labels.Children.Add(titleText);
+        var button = Ui.Button("", () => { selectedCalendarEvent = item; Navigate("calendar-detail"); }, double.NaN, double.NaN); button.Margin = new Thickness(0); button.Padding = new Thickness(compact ? 8 : 10); button.Background = Brushes.Transparent; button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.VerticalContentAlignment = VerticalAlignment.Top; button.Template = CalendarEventButtonTemplate(); button.Content = labels;
+        return new Border { Child = button, Margin = new Thickness(0, 0, 0, compact ? 7 : 10), CornerRadius = new CornerRadius(10), Background = EventFill(item.Color), ClipToBounds = true };
+    }
+    static ControlTemplate CalendarEventButtonTemplate()
+    {
+        var surface = new FrameworkElementFactory(typeof(Border)) { Name = "EventSurface" }; surface.SetValue(Border.CornerRadiusProperty, new CornerRadius(10)); surface.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+        var content = new FrameworkElementFactory(typeof(ContentPresenter)); content.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Stretch); content.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Top); content.SetValue(FrameworkElement.MarginProperty, new TemplateBindingExtension(Control.PaddingProperty)); surface.AppendChild(content);
+        var template = new ControlTemplate(typeof(Button)) { VisualTree = surface }; var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true }; hover.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(34, 255, 255, 255)), "EventSurface")); template.Triggers.Add(hover); var pressed = new Trigger { Property = Button.IsPressedProperty, Value = true }; pressed.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(52, 255, 255, 255)), "EventSurface")); template.Triggers.Add(pressed); return template;
     }
     void SetCalendarView(bool week) { if (calendarWeek == week) return; calendarWeek = week; Build(); PositionSurface(); UpdateLayout(); }
     void UpdateCalendarNowLine(double hourHeight = 64) { if (calendarNowLine != null) Canvas.SetTop(calendarNowLine, DateTime.Now.TimeOfDay.TotalHours * hourHeight); }
@@ -237,6 +261,9 @@ internal sealed class PanelWindow : ShellWindow
     void ShiftCalendar(int days) { calendarDate = calendarDate.AddDays(days); Build(); _ = owner.Calendar.Refresh(calendarDate.AddDays(-7), calendarDate.AddDays(14)); }
     static DateTime WeekStart(DateTime day) => day.Date.AddDays(-((7 + (int)day.DayOfWeek - (int)DayOfWeek.Monday) % 7));
     static Brush CalendarColor(string color) { try { return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)); } catch { return Ui.WindowsAccent; } }
+    static Brush EventFill(string value) { Color color = CalendarValue(value); return new SolidColorBrush(Color.FromArgb(205, color.R, color.G, color.B)); }
+    static Brush EventForeground(string value) { Color color = CalendarValue(value); double luminance = .2126 * color.R + .7152 * color.G + .0722 * color.B; return luminance > 155 ? new SolidColorBrush(Color.FromRgb(18, 22, 28)) : Brushes.White; }
+    static Color CalendarValue(string value) { try { return (Color)ColorConverter.ConvertFromString(value); } catch { return Ui.WindowsAccentColor; } }
     void AddMediaBackdrop()
     {
         mediaBackdrop = new Image { Width = Width, Height = panelHeight, Stretch = Stretch.UniformToFill, Opacity = .92, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new Point(.5, .5), RenderTransform = new ScaleTransform(1.18, 1.18), Effect = new BlurEffect { Radius = 34, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality } };

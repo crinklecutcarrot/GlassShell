@@ -88,6 +88,8 @@ internal sealed class CalendarService
         try
         {
             await EnsureToken();
+            var eventColors = new Dictionary<string, string>();
+            using (var colorsJson = await Get("https://www.googleapis.com/calendar/v3/colors")) if (colorsJson.RootElement.TryGetProperty("event", out var colorItems)) foreach (var colorItem in colorItems.EnumerateObject()) if (colorItem.Value.TryGetProperty("background", out var background)) eventColors[colorItem.Name] = background.GetString() ?? "";
             using var calendarsJson = await Get("https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&showHidden=false&maxResults=250");
             var calendars = calendarsJson.RootElement.GetProperty("items").EnumerateArray().Where(x => !x.TryGetProperty("hidden", out var hidden) || !hidden.GetBoolean()).Where(x => !x.TryGetProperty("selected", out var selected) || selected.GetBoolean()).ToArray();
             var gathered = new List<CalendarEvent>();
@@ -102,8 +104,8 @@ internal sealed class CalendarService
                     bool allDay = item.GetProperty("start").TryGetProperty("date", out var startDate); DateTimeOffset start, end;
                     if (allDay) { start = new DateTimeOffset(DateTime.Parse(startDate.GetString()!).Date); end = new DateTimeOffset(DateTime.Parse(item.GetProperty("end").GetProperty("date").GetString()!).Date); }
                     else { start = DateTimeOffset.Parse(item.GetProperty("start").GetProperty("dateTime").GetString()!).ToLocalTime(); end = DateTimeOffset.Parse(item.GetProperty("end").GetProperty("dateTime").GetString()!).ToLocalTime(); }
-                    string join = item.TryGetProperty("hangoutLink", out var hangout) ? hangout.GetString() ?? "" : ConferenceLink(item);
-                    gathered.Add(new(item.GetProperty("id").GetString() ?? Guid.NewGuid().ToString(), Text(item, "summary", "Untitled event"), Text(item, "description"), Text(item, "location"), start, end, allDay, color, join, Text(item, "htmlLink")));
+                    string join = item.TryGetProperty("hangoutLink", out var hangout) ? hangout.GetString() ?? "" : ConferenceLink(item); string eventColor = item.TryGetProperty("colorId", out var colorId) && eventColors.TryGetValue(colorId.GetString() ?? "", out var overrideColor) ? overrideColor : color;
+                    gathered.Add(new(item.GetProperty("id").GetString() ?? Guid.NewGuid().ToString(), Text(item, "summary", "Untitled event"), Text(item, "description"), Text(item, "location"), start, end, allDay, eventColor, join, Text(item, "htmlLink")));
                 }
             }
             events = gathered.OrderBy(x => x.Start).ToList(); Message = "";
