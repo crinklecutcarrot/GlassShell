@@ -37,7 +37,7 @@ Windows media sessions do not expose song ratings. GlassShell includes a local C
 
 ## Google Calendar
 
-Create an OAuth 2.0 **Desktop app** client in Google Cloud, with the Google Calendar API enabled. Copy `%LOCALAPPDATA%\GlassShell\google-calendar-oauth.template.json` to `google-calendar-oauth.json`, replace the client ID and client secret, restart GlassShell, then click the stacked date/time and **Connect Google Calendar**. If the OAuth consent screen is in Testing, add your Google account as a test user.
+Create an OAuth 2.0 **Desktop app** client in Google Cloud, with the Google Calendar API enabled. Copy `config/google-calendar-oauth.example.json` to `config/google-calendar-oauth.json`, replace the client ID and client secret, restart GlassShell, then click the stacked date/time and **Connect Google Calendar**. The private file is ignored by Git. You may also paste Google's complete downloaded Desktop-client JSON; both formats are accepted. If the OAuth consent screen is in Testing, add your Google account as a test user.
 
 GlassShell requests only `calendar.readonly`, loads every calendar marked visible in that Google account, and stores the refresh token encrypted for the current Windows user with DPAPI. It refreshes in the background every five minutes. The calendar cannot create, edit, or delete events.
 

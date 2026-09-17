@@ -28,7 +28,8 @@ internal sealed class CalendarService
     public bool Busy { get; private set; }
     public string Message { get; private set; } = "";
     public int AttentionCount => events.Count(e => !e.AllDay && e.Start <= DateTimeOffset.Now.AddHours(1) && e.End > DateTimeOffset.Now);
-    string ConfigPath => Path.Combine(Storage.Root, "google-calendar-oauth.json");
+    string ProjectConfigPath => Path.Combine(Environment.CurrentDirectory, "config", "google-calendar-oauth.json");
+    string ConfigPath => File.Exists(ProjectConfigPath) ? ProjectConfigPath : Path.Combine(Storage.Root, "google-calendar-oauth.json");
     string TokenPath => Path.Combine(Storage.Root, "google-calendar-token.bin");
 
     public CalendarService()
@@ -43,7 +44,14 @@ internal sealed class CalendarService
     {
         try
         {
-            if (File.Exists(ConfigPath)) config = JsonSerializer.Deserialize<OAuthConfig>(File.ReadAllText(ConfigPath), JsonOptions);
+            if (File.Exists(ConfigPath))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(ConfigPath)); var root = document.RootElement;
+                if (root.TryGetProperty("installed", out var installed)) root = installed;
+                string clientId = root.TryGetProperty("clientId", out var camelId) ? camelId.GetString() ?? "" : root.TryGetProperty("client_id", out var snakeId) ? snakeId.GetString() ?? "" : "";
+                string clientSecret = root.TryGetProperty("clientSecret", out var camelSecret) ? camelSecret.GetString() ?? "" : root.TryGetProperty("client_secret", out var snakeSecret) ? snakeSecret.GetString() ?? "" : "";
+                config = new(clientId, clientSecret);
+            }
             if (File.Exists(TokenPath)) token = JsonSerializer.Deserialize<TokenState>(Encoding.UTF8.GetString(Unprotect(Convert.FromBase64String(File.ReadAllText(TokenPath)))), JsonOptions);
         }
         catch (Exception e) { Message = "Calendar setup could not be read."; Storage.Log("Calendar load: " + e); }
@@ -52,7 +60,7 @@ internal sealed class CalendarService
     public async Task Connect()
     {
         Load();
-        if (config == null || string.IsNullOrWhiteSpace(config.ClientId)) { Message = "Add Google OAuth credentials to google-calendar-oauth.json first."; Changed?.Invoke(); return; }
+        if (config == null || string.IsNullOrWhiteSpace(config.ClientId) || config.ClientId.Contains("PASTE_", StringComparison.OrdinalIgnoreCase) || config.ClientId.Contains("YOUR_GOOGLE_", StringComparison.OrdinalIgnoreCase)) { Message = "Add Google OAuth credentials to config/google-calendar-oauth.json first."; Changed?.Invoke(); return; }
         Busy = true; Message = "Waiting for Google sign-in…"; Changed?.Invoke();
         try
         {

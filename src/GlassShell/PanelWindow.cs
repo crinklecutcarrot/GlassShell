@@ -159,7 +159,7 @@ internal sealed class PanelWindow : ShellWindow
             body.Children.Add(new Border { Height = 18 });
             body.Children.Add(Ui.Button("Open calendar setup folder", () => Ui.Open(Storage.Root), 260, 42));
             body.Children.Add(Ui.Button(service.Busy ? "Waiting for Google…" : "Connect Google Calendar", () => _ = service.Connect(), 260, 42));
-            var hint = Ui.Text("Copy google-calendar-oauth.template.json to google-calendar-oauth.json and add a Google Desktop OAuth client ID and secret, then choose Connect.", 12, Ui.Muted); hint.TextWrapping = TextWrapping.Wrap; hint.TextTrimming = TextTrimming.None; hint.Margin = new Thickness(4, 14, 0, 0); body.Children.Add(hint);
+            var hint = Ui.Text("Add a Google Desktop OAuth client ID and secret to config/google-calendar-oauth.json, then choose Connect.", 12, Ui.Muted); hint.TextWrapping = TextWrapping.Wrap; hint.TextTrimming = TextTrimming.None; hint.Margin = new Thickness(4, 14, 0, 0); body.Children.Add(hint);
             if (service.Message.Length > 0) body.Children.Add(Message(service.Message));
             return;
         }

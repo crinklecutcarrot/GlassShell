@@ -4,4 +4,5 @@
 artifacts/
 *.user
 Launch GlassShell.lnk
+config/google-calendar-oauth.json
 src/GlassShell/Native/
