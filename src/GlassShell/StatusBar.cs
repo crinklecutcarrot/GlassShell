@@ -21,6 +21,7 @@ internal sealed class StatusBar : ShellWindow
     public StatusBar(ShellController controller) : base("GlassShell · Status", 1000, 56)
     {
         owner = controller; Glass.TintAmount = .48; Glass.BottomBorderOnly = true;
+        clock.LineStackingStrategy = date.LineStackingStrategy = LineStackingStrategy.BlockLineHeight; clock.LineHeight = 13; date.LineHeight = 11;
         var left = Ui.Row(Link("layout-grid", "Widgets", "widgets"), Link("stopwatch", "Timer", "timer"), Link("pencil", "Notes", "notes")); left.HorizontalAlignment = HorizontalAlignment.Left; left.VerticalAlignment = VerticalAlignment.Center; left.Margin = new Thickness(10, 0, 0, 0); Glass.Content.Children.Add(left);
         var nativeTray = Ui.Icon("chevron-down", "Windows tray", owner.Tray.ShowNativeOverflow, 28);
         soundIcon.Margin = new Thickness(4, 0, 0, 0);
