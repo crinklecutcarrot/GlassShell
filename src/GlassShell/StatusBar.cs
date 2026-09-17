@@ -12,7 +12,7 @@ internal sealed class StatusBar : ShellWindow
 {
     public double ReservedHeight { get; private set; } = 36; public double VisualHeight => height.Value;
     readonly Spring height = new(36); readonly ShellController owner; uint callback; bool registered, positioning;
-    readonly Dictionary<string, Button> anchors = new(); readonly TextBlock clock = Ui.Text("", 12), date = Ui.Text("", 10, Ui.Muted), title = Ui.Text("", 12, weight: FontWeights.SemiBold), artist = Ui.Text("", 10, Ui.Muted), time = Ui.Text("", 14);
+    readonly Dictionary<string, Button> anchors = new(); readonly TextBlock clock = Ui.Text("", 13), date = Ui.Text("", 11, Ui.Muted), title = Ui.Text("", 12, weight: FontWeights.SemiBold), artist = Ui.Text("", 10, Ui.Muted), time = Ui.Text("", 14);
     readonly RoundedImage art = new(30, 30, 6) { Margin = new Thickness(0, 0, 9, 0) };
     readonly StackPanel musicLabels; readonly Image timerIcon = TablerIcon.Create("stopwatch", 16), wifiIcon = TablerIcon.Create("wifi-off", 16), soundIcon = TablerIcon.Create("volume-2", 16); readonly Border calendarBadge; readonly TextBlock calendarBadgeText; bool? lastExpired; bool? lastPlaying; readonly Button music, timerButton, play, previous, next; readonly Grid divider; readonly TimerRing ring = new();
     int displayedTrack = -1, targetTrack = -1, trackAnimation;
@@ -29,7 +29,7 @@ internal sealed class StatusBar : ShellWindow
         calendarBadgeText = Ui.Text("", 8, Brushes.White, FontWeights.SemiBold); calendarBadgeText.HorizontalAlignment = HorizontalAlignment.Center;
         calendarBadge = new Border { MinWidth = 14, Height = 14, Padding = new Thickness(3, 0, 3, 0), CornerRadius = new CornerRadius(7), Background = Ui.WindowsAccent, Child = calendarBadgeText, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 5, 0) };
         var dateLine = Ui.Row(calendarBadge, date); dateLine.HorizontalAlignment = HorizontalAlignment.Right;
-        var dateTime = new StackPanel { VerticalAlignment = VerticalAlignment.Center }; date.HorizontalAlignment = clock.HorizontalAlignment = HorizontalAlignment.Right; dateTime.Children.Add(dateLine); dateTime.Children.Add(clock);
+        var dateTime = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0) }; date.HorizontalAlignment = clock.HorizontalAlignment = HorizontalAlignment.Right; dateTime.Children.Add(dateLine); dateTime.Children.Add(clock);
         var calendarButton = Ui.Button("", () => owner.OpenPanel("calendar"), double.NaN, 34); calendarButton.Margin = new Thickness(4, 0, 0, 0); calendarButton.Content = dateTime; calendarButton.Tag = "calendar"; anchors["calendar"] = calendarButton;
         var right = Ui.Row(nativeTray, nativeControls, nativeNotifications, calendarButton); right.HorizontalAlignment = HorizontalAlignment.Right; right.VerticalAlignment = VerticalAlignment.Center; right.Margin = new Thickness(0, 0, 10, 0); Glass.Content.Children.Add(right);
         musicLabels = new StackPanel { Width = 185, VerticalAlignment = VerticalAlignment.Center }; musicLabels.Children.Add(title); musicLabels.Children.Add(artist);
