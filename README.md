@@ -45,7 +45,7 @@ GlassShell requests only `calendar.readonly`, loads every calendar marked visibl
 
 A custom HLSL edge-refraction shader, background blur, and rounded clipping approximate liquid glass. This is not Apple's renderer. Desktop capture currently uses background GDI capture and CPU-to-GPU uploads, capped at 30 captures per second with idle backoff. WPF animation runs independently. Sustained GPU performance and HDR color management remain unverified.
 
-Live-glass surfaces remain visible to screenshots and screen sharing. During each internal glass refresh, GlassShell excludes its windows only for the few milliseconds needed to capture a clean background, then immediately makes them capturable again. When the Windows Snipping Tool overlay is detected, GlassShell pauses those refreshes and keeps the last clean glass texture frozen until the snip ends. Turning live glass off from the GlassShell tray menu switches to the fallback material until re-enabled.
+Live-glass surfaces normally exclude themselves from capture to prevent recursive haze. GlassShell observes the Win+Shift+S shortcut before Windows opens Snipping Tool, freezes the last clean glass texture, and makes its windows capturable for the snip. Capture exclusion and live updates return after the overlay closes. Turning live glass off from the GlassShell tray menu switches to the fallback material until re-enabled.
 
 ## Development and checks
 
