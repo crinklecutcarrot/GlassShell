@@ -22,7 +22,7 @@ internal sealed class UiRegressionTest
         var checks = new Dictionary<string, bool>(); string? error = null; Window? fixture = null; Native.GetCursorPos(out var originalCursor); try
         {
             Directory.CreateDirectory("artifacts/ui-regression");
-            await Task.Delay(700); checks["idle bar"] = !s.Bar.MusicVisible && !s.Bar.TimerVisible && s.Bar.ReservedHeight == 36;
+            await Task.Delay(700); checks["idle bar"] = !s.Bar.MusicVisible && !s.Bar.TimerVisible && s.Bar.ReservedHeight == 40;
             s.Media.SetTestState(true);
             var enteringCenter = (StackPanel)s.Bar.Glass.Content.Children[2];
             var enteringMusic = (Button)enteringCenter.Children[0];
@@ -69,7 +69,7 @@ internal sealed class UiRegressionTest
             s.Panel.Navigate("wifi"); await Task.Delay(220); checks["wifi subpage stays in panel"] = s.Panel.IsOpen && s.Panel.CurrentPage == "wifi"; checks["wifi test network rendered"] = FindText(s.Panel, "Test Network"); var wifiScroll = FindVisual<ScrollViewer>(s.Panel); checks["wifi scrollbar hidden"] = wifiScroll?.VerticalScrollBarVisibility == ScrollBarVisibility.Hidden; checks["wifi header has switch"] = FindVisual<System.Windows.Controls.Primitives.ToggleButton>(s.Panel)?.IsChecked == true; await Capture(s.Panel, "wifi-panel.png");
             s.Panel.Navigate("bluetooth"); await Task.Delay(220); checks["bluetooth subpage stays in panel"] = s.Panel.IsOpen && s.Panel.CurrentPage == "bluetooth"; checks["bluetooth test device rendered"] = FindText(s.Panel, "Test Headphones"); await Capture(s.Panel, "bluetooth-panel.png"); s.Panel.Dismiss(); await Task.Delay(160);
             s.Tray.ShowNativeOverflow(); checks["top tray requests native flyout"] = s.Tray.NativeFlyoutRequested;
-            s.Media.SetTestState(false); checks["activity remains during exit animation"] = music.Visibility == Visibility.Visible; await Task.Delay(1000); checks["idle restored"] = !s.Bar.MusicVisible && s.Bar.ReservedHeight == 36;
+            s.Media.SetTestState(false); checks["activity remains during exit animation"] = music.Visibility == Visibility.Visible; await Task.Delay(1000); checks["idle restored"] = !s.Bar.MusicVisible && s.Bar.ReservedHeight == 40;
             fixture.Close(); fixture = null;
         }
         catch (Exception ex) { error = ex.ToString(); }
